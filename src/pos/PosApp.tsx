@@ -87,7 +87,8 @@ export default function PosApp() {
     } catch (e) {
       if (e instanceof Unauthorized) setUnauthorized(true);
       setOnline(false);
-      backoff.current = Math.min(backoff.current * 2, 300_000);
+      // retry quickly: on Android the "online" event often never fires when Wi-Fi stays connected
+      backoff.current = Math.min(backoff.current * 2, 30_000);
       setPending(await pendingCount());
     } finally {
       syncing.current = false;
@@ -258,7 +259,11 @@ export default function PosApp() {
             <span className={`inline-block w-4 h-4 rounded-full ${online ? "bg-green-400" : "bg-red-500"}`} />
             {online ? "متصل" : "بدون إنترنت — الطلبات محفوظة"}
           </span>
-          {pending > 0 && <span className="bg-white/20 rounded-full px-3 py-1">في الانتظار: {pending}</span>}
+          {pending > 0 && (
+            <button onClick={() => { backoff.current = 5000; void syncNow(); }} className="bg-white/20 rounded-full px-3 py-1" title="مزامنة الآن">
+              في الانتظار: {pending} ⟳
+            </button>
+          )}
           <button onClick={() => { void refreshUnpaid(); setStep("unpaid"); }} data-testid="unpaid-btn"
             className={`rounded-full px-4 py-2 font-bold ${unpaid.length ? "bg-yellow-300 text-black" : "bg-white/20"}`}>
             غير مدفوعة: {unpaid.length}

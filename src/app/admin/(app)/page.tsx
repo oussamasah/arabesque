@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { after } from "next/server";
 import { and, desc, eq, isNull } from "drizzle-orm";
 import { getDb } from "@/db";
 import { alerts, devices } from "@/db/schema";
@@ -32,7 +33,12 @@ function Cards({ title, s }: { title: string; s: ProfitSummary }) {
 export default async function Dashboard({ searchParams }: { searchParams: SP }) {
   const sp = await searchParams;
   const db = await getDb();
-  await runPeriodicChecks(db).catch((e) => console.error("checks", e));
+  // periodic checks run after the page is sent (and at most every 10 minutes), so the dashboard opens fast
+  const g = globalThis as { __cafeChecksAt?: number };
+  if (!g.__cafeChecksAt || Date.now() - g.__cafeChecksAt > 10 * 60_000) {
+    g.__cafeChecksAt = Date.now();
+    after(() => runPeriodicChecks(db).catch((e) => console.error("checks", e)));
+  }
   const s = await getSettings(db);
   const today = shiftInfo(new Date(), s.morning_start_hour, s.evening_start_hour).businessDay;
   const [d, w, m] = await Promise.all([

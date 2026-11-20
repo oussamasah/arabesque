@@ -11,7 +11,9 @@ const nextConfig: NextConfig = {
         source: "/:path*",
         headers: [
           { key: "X-Content-Type-Options", value: "nosniff" },
-          { key: "Referrer-Policy", value: "no-referrer" },
+          // "no-referrer" made browsers send `Origin: null` on forms submitted before the page finished loading,
+          // which Next.js server actions reject (first click lost). same-origin still sends nothing to other sites.
+          { key: "Referrer-Policy", value: "same-origin" },
           { key: "X-Frame-Options", value: "DENY" },
           { key: "Permissions-Policy", value: "camera=(self), microphone=(), geolocation=()" },
         ],

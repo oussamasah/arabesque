@@ -20,19 +20,48 @@ export function Scanner({ onResult }: { onResult: (text: string) => void }) {
       try { detector = new W.BarcodeDetector({ formats: ["qr_code"] }); } catch { detector = null; }
     }
     async function start() {
+      if (!window.isSecureContext) {
+        setError("الكاميرا تحتاج رابط https — اكتب الرمز");
+        return;
+      }
       if (!navigator.mediaDevices?.getUserMedia) {
-        setError("الكاميرا غير متاحة — اكتب الرمز");
+        setError("المتصفح لا يسمح بالكاميرا (في Fully Kiosk: فعّل Enable Webcam Access) — اكتب الرمز");
+        return;
+      }
+      // back camera first, then any camera (some tablets / kiosk browsers refuse facingMode)
+      const attempts: MediaStreamConstraints[] = [
+        { video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 } }, audio: false },
+        { video: true, audio: false },
+      ];
+      let lastErr: unknown = null;
+      for (const c of attempts) {
+        try {
+          stream = await navigator.mediaDevices.getUserMedia(c);
+          break;
+        } catch (e) {
+          lastErr = e;
+          if ((e as DOMException)?.name === "NotAllowedError") break; // permission refused: retrying will not help
+        }
+      }
+      if (!stream) {
+        const name = (lastErr as DOMException)?.name ?? "";
+        setError(
+          name === "NotAllowedError" ? "إذن الكاميرا مرفوض (أعطِ Fully Kiosk إذن الكاميرا وفعّل Enable Webcam Access) — اكتب الرمز"
+          : name === "NotFoundError" || name === "OverconstrainedError" ? "لم يتم العثور على كاميرا — اكتب الرمز"
+          : name === "NotReadableError" ? "الكاميرا مستعملة من تطبيق آخر — اكتب الرمز"
+          : `لا يمكن فتح الكاميرا (${name || "خطأ"}) — اكتب الرمز`,
+        );
         return;
       }
       try {
-        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment", width: { ideal: 1280 } }, audio: false });
         if (cancelled) { stream.getTracks().forEach((t) => t.stop()); return; }
         const v = videoRef.current!;
+        v.setAttribute("playsinline", "true");
         v.srcObject = stream;
         await v.play();
         tick();
-      } catch {
-        setError("لا يمكن فتح الكاميرا — اكتب الرمز");
+      } catch (e) {
+        setError(`لا يمكن تشغيل الكاميرا (${(e as Error)?.name ?? "خطأ"}) — اكتب الرمز`);
       }
     }
     async function tick() {

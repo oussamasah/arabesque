@@ -1,9 +1,21 @@
 /* Café POS service worker — makes the worker app (/pos) load with no internet. API calls are never cached. */
-const CACHE = "cafe-pos-v2";
+const CACHE = "cafe-pos-v3";
 const SHELL = ["/pos", "/manifest.webmanifest", "/icon.svg"];
 
+// Pre-cache the POS page AND every script/style it references, so it opens with no internet
+// even if the tablet loses the connection right after the first visit.
+async function precachePos() {
+  const c = await caches.open(CACHE);
+  await c.addAll(SHELL);
+  const res = await c.match("/pos");
+  if (!res) return;
+  const html = await res.text();
+  const urls = [...new Set([...html.matchAll(/\/_next\/static\/[^"'\s)]+/g)].map((m) => m[0].replace(/\u0026/g, "&")))];
+  await Promise.all(urls.map((u) => c.match(u).then((hit) => hit || c.add(u).catch(() => {}))));
+}
+
 self.addEventListener("install", (event) => {
-  event.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
+  event.waitUntil(precachePos().catch(() => {}).then(() => self.skipWaiting()));
 });
 
 self.addEventListener("activate", (event) => {

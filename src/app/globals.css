@@ -64,3 +64,6 @@ body { font-family: "Segoe UI", Tahoma, "Noto Sans Arabic", "Noto Naskh Arabic",
   .no-print { display: none !important; }
   body { background: #fff; }
 }
+
+@keyframes busybar { 0% { transform: translateX(-120%); } 100% { transform: translateX(320%); } }
+form[data-submitting] button { opacity: .55; cursor: progress; }
