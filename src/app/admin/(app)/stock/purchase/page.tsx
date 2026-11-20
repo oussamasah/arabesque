@@ -5,6 +5,7 @@ import { stockItems } from "@/db/schema";
 import { purchaseInvoiceAction } from "@/admin/actions/main";
 import { Back, Flash, PageTitle, type SP } from "@/admin/ui";
 import { bigUnitLabel, type StockKind } from "@/lib/units";
+import { RecentMovements } from "@/admin/RecentMovements";
 
 export const dynamic = "force-dynamic";
 
@@ -58,6 +59,7 @@ export default async function PurchasePage({ searchParams }: { searchParams: SP 
 
         <button className="btn text-lg px-8 py-3">تسجيل الشراء</button>
       </form>
+      <RecentMovements types={["purchase"]} back="/admin/stock/purchase" title="آخر المشتريات (لإلغاء شراء خاطئ)" />
     </>
   );
 }

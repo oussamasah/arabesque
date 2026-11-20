@@ -5,8 +5,8 @@ import { getDb } from "@/db";
 import { productPrices, products, recipeLines, recipeVersions, stockItems } from "@/db/schema";
 import { recipeAt } from "@/server/catalog";
 import { costAt } from "@/server/stock";
-import { saveProductAction, saveRecipeAction, setPriceAction } from "@/admin/actions/main";
-import { Back, Flash, Money, PageTitle, type SP } from "@/admin/ui";
+import { deleteProductAction, saveProductAction, saveRecipeAction, setPriceAction, voidPriceAction } from "@/admin/actions/main";
+import { Back, CancelForm, Flash, Money, PageTitle, type SP } from "@/admin/ui";
 import { formatTunis, toTunisLocalInput } from "@/lib/time";
 import { baseToYield, formatSmall, KIND_AR, smallUnitLabel, bigUnitLabel, type StockKind } from "@/lib/units";
 import { millimesToInput, roundHalfUp } from "@/lib/money";
@@ -68,6 +68,10 @@ export default async function ProductPage({ params, searchParams }: { params: Pr
             </fieldset>
             <div className="col-span-2"><button className="btn">حفظ</button></div>
           </form>
+          <div className="mt-4 border-t pt-3">
+            <CancelForm action={deleteProductAction} back={back} id={p.id} label="حذف المنتج" confirm="تأكيد الحذف" withReason={false} />
+            <p className="muted text-xs mt-1">يختفي من التابلت والقوائم، ومبيعاته السابقة تبقى في التقارير.</p>
+          </div>
         </section>
 
         <section className="card">
@@ -78,8 +82,13 @@ export default async function ProductPage({ params, searchParams }: { params: Pr
             <label><span className="lbl">ساري من (توقيت تونس)</span><input className="inp" type="datetime-local" name="effectiveFrom" defaultValue={toTunisLocalInput(now)} /></label>
             <button className="btn">تسجيل</button>
           </form>
-          <table className="tbl"><thead><tr><th>ساري من</th><th>السعر</th><th>بواسطة</th></tr></thead>
-            <tbody>{prices.map((x) => <tr key={x.id}><td className="num">{formatTunis(x.effectiveFrom)}</td><td><Money m={x.priceMillimes} /></td><td className="muted text-xs">{x.createdBy}</td></tr>)}</tbody>
+          <table className="tbl"><thead><tr><th>ساري من</th><th>السعر</th><th>بواسطة</th><th></th></tr></thead>
+            <tbody>{prices.map((x) => (
+              <tr key={x.id} className={x.voidedAt ? "opacity-50 line-through" : ""}>
+                <td className="num">{formatTunis(x.effectiveFrom)}</td><td><Money m={x.priceMillimes} /></td><td className="muted text-xs">{x.createdBy}</td>
+                <td className="no-underline">{x.voidedAt ? <span className="badge badge-gray">محذوف</span> : <CancelForm action={voidPriceAction} back={back} id={x.id} label="حذف" withReason={false} />}</td>
+              </tr>
+            ))}</tbody>
           </table>
         </section>
 

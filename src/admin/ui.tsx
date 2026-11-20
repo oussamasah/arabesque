@@ -96,3 +96,20 @@ export function PaymentBadge({ type }: { type: string }) {
   const cls = type === "cash" ? "" : type === "ticket" ? "badge badge-blue" : type === "pending" ? "badge badge-yellow" : "badge badge-red";
   return <span className={cls}>{PAYMENT_AR[type] ?? type}</span>;
 }
+
+/** Small "cancel / delete with a reason" control: opens inline, asks for a reason, then submits. */
+export function CancelForm({ action, back, id, label = "إلغاء", confirm = "تأكيد", withReason = true, idName = "id" }: {
+  action: (fd: FormData) => Promise<void>; back: string; id: string | number; label?: string; confirm?: string; withReason?: boolean; idName?: string;
+}) {
+  return (
+    <details className="inline-block align-middle">
+      <summary className="btn btn-ghost btn-sm list-none cursor-pointer text-red-700">{label}</summary>
+      <form action={action} className="flex flex-wrap gap-1 mt-1 items-center">
+        <input type="hidden" name="_back" value={back} />
+        <input type="hidden" name={idName} value={String(id)} />
+        {withReason && <input name="reason" required placeholder="السبب" className="inp w-40 py-1 text-sm" />}
+        <button className="btn btn-danger btn-sm">{confirm}</button>
+      </form>
+    </details>
+  );
+}

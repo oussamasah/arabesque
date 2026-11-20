@@ -1,5 +1,5 @@
 import "server-only";
-import { and, asc, eq, gte, inArray, lte, ne, sql } from "drizzle-orm";
+import { and, asc, eq, gte, inArray, isNull, lte, ne, sql } from "drizzle-orm";
 import {
   cashCounts, creditLedger, customers, expenses, orderItems, orders, products, roster, stockCounts, stockItems, tickets,
 } from "@/db/schema";
@@ -225,8 +225,8 @@ export async function shiftRows(db: Exec, from: string, to: string): Promise<Shi
     .groupBy(orders.paidBusinessDay, orders.paidShift);
   const counts = await db.select({ day: stockCounts.businessDay, shift: stockCounts.evaluatedShift, m: stockCounts.marginUsedPct, v: stockCounts.varianceBase, kind: stockItems.kind })
     .from(stockCounts).innerJoin(stockItems, eq(stockItems.id, stockCounts.stockItemId))
-    .where(and(gte(stockCounts.businessDay, from), lte(stockCounts.businessDay, to)));
-  const cash = await db.select().from(cashCounts).where(and(gte(cashCounts.businessDay, from), lte(cashCounts.businessDay, to))).orderBy(asc(cashCounts.ts));
+    .where(and(gte(stockCounts.businessDay, from), lte(stockCounts.businessDay, to), isNull(stockCounts.cancelledAt)));
+  const cash = await db.select().from(cashCounts).where(and(gte(cashCounts.businessDay, from), lte(cashCounts.businessDay, to), isNull(cashCounts.cancelledAt))).orderBy(asc(cashCounts.ts));
   const rosterRows = await db.select().from(roster).where(and(gte(roster.businessDay, from), lte(roster.businessDay, to)));
   const out: ShiftRow[] = [];
   for (const d of eachDay(from, to)) {
@@ -340,7 +340,7 @@ export async function workerStats(db: Exec, from: string, to: string) {
 
 /** Outstanding credit per customer with FIFO aging of unpaid charges. */
 export async function creditAging(db: Exec, today: string) {
-  const custs = await db.select().from(customers).orderBy(asc(customers.name));
+  const custs = await db.select().from(customers).where(isNull(customers.deletedAt)).orderBy(asc(customers.name));
   const ledger = await db.select().from(creditLedger).orderBy(asc(creditLedger.ts), asc(creditLedger.id));
   const out = [];
   for (const c of custs) {

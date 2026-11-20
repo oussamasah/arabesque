@@ -1,5 +1,5 @@
 import "server-only";
-import { and, asc, desc, eq, inArray, lte } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, lte } from "drizzle-orm";
 import { productPrices, products, recipeLines, recipeVersions, stockItems } from "@/db/schema";
 import type { Exec } from "@/db";
 import { audit } from "./audit";
@@ -42,7 +42,7 @@ export async function setPrice(db: Exec, productId: number, priceMillimes: numbe
 
 export async function priceAt(db: Exec, productId: number, at: Date): Promise<number | null> {
   const [row] = await db.select().from(productPrices)
-    .where(and(eq(productPrices.productId, productId), lte(productPrices.effectiveFrom, at)))
+    .where(and(eq(productPrices.productId, productId), lte(productPrices.effectiveFrom, at), isNull(productPrices.voidedAt)))
     .orderBy(desc(productPrices.effectiveFrom), desc(productPrices.id)).limit(1);
   return row ? row.priceMillimes : null;
 }
@@ -89,7 +89,7 @@ export async function recipeAt(db: Exec, productId: number, at: Date) {
 
 export async function listProducts(db: Exec, onlyActive = false) {
   const q = db.select().from(products);
-  const rows = onlyActive ? await q.where(eq(products.active, true)).orderBy(asc(products.sortOrder), asc(products.id))
-    : await q.orderBy(asc(products.sortOrder), asc(products.id));
+  const rows = onlyActive ? await q.where(and(eq(products.active, true), isNull(products.deletedAt))).orderBy(asc(products.sortOrder), asc(products.id))
+    : await q.where(isNull(products.deletedAt)).orderBy(asc(products.sortOrder), asc(products.id));
   return rows;
 }

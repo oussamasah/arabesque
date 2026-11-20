@@ -2,9 +2,10 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { and, eq } from "drizzle-orm";
 import { getDb } from "@/db";
-import { auditLog, devices, orders, tickets } from "@/db/schema";
+import { auditLog, devices, orderItems, orders, tickets } from "@/db/schema";
+import { listProducts } from "@/server/catalog";
 import { orderLinesFor, workerFor } from "@/server/finance";
-import { adminPayAction, approveOrderAction, unpaidLossAction, voidOrderAction } from "@/admin/actions/main";
+import { adminPayAction, approveOrderAction, editOrderAction, unpaidLossAction, voidOrderAction } from "@/admin/actions/main";
 import { Back, FLAG_AR, Flash, Money, PAYMENT_AR, PageTitle, STATUS_AR, type SP } from "@/admin/ui";
 import { formatTunis, SHIFT_AR, toTunisLocalInput, type Shift } from "@/lib/time";
 
@@ -23,6 +24,8 @@ export default async function OrderPage({ params, searchParams }: { params: Prom
   const worker = await workerFor(db, o.businessDay, o.shift as Shift);
   const log = await db.select().from(auditLog).where(and(eq(auditLog.entity, "order"), eq(auditLog.entityId, o.id)));
   const back = `/admin/orders/${o.id}`;
+  const qtyOf = new Map((await db.select().from(orderItems).where(eq(orderItems.orderId, o.id))).map((i) => [i.productId, i.qty]));
+  const allProducts = await listProducts(db, true);
   return (
     <>
       <Flash sp={sp} />
@@ -86,6 +89,23 @@ export default async function OrderPage({ params, searchParams }: { params: Prom
               <input className="inp" name="note" placeholder="ملاحظة" />
               <button className="btn w-full">موافقة</button>
             </form>
+          )}
+          {o.status !== "void" && o.paymentType !== "loss" && (
+            <details>
+              <summary className="h2 cursor-pointer">تعديل المنتجات</summary>
+              <form action={editOrderAction} className="space-y-2 mt-2">
+                <Back value={back} /><input type="hidden" name="orderId" value={o.id} />
+                <div className="grid grid-cols-2 gap-1 max-h-72 overflow-auto">
+                  {allProducts.map((p) => (
+                    <label key={p.id} className="flex items-center justify-between gap-1 border rounded-lg px-2 py-1 text-sm">
+                      <span>{p.nameAr}</span><input className="inp w-16 py-1" type="number" min={0} max={99} name={`qty_${p.id}`} defaultValue={qtyOf.get(p.id) ?? ""} />
+                    </label>
+                  ))}
+                </div>
+                <p className="muted text-xs">يُلغى هذا الطلب ويُنشأ طلب مصحَّح بنفس الوقت ونفس طريقة الدفع (الاثنان يبقيان ظاهرين).</p>
+                <button className="btn w-full">حفظ التعديل</button>
+              </form>
+            </details>
           )}
           {o.status !== "void" && (
             <form action={voidOrderAction} className="space-y-2">

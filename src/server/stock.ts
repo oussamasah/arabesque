@@ -1,5 +1,5 @@
 import "server-only";
-import { and, asc, desc, eq, gt, gte, inArray, lt, lte, ne, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, gte, inArray, isNull, lt, lte, ne, sql } from "drizzle-orm";
 import {
   expenses, orderItems, orders, recipeLines, stockCostHistory, stockCounts, stockItems, stockMovements,
 } from "@/db/schema";
@@ -180,7 +180,7 @@ export async function recordCount(db: Exec, input: {
     if (!item) throw new Error("مادة غير موجودة");
     const theoretical = await theoreticalAt(db, item.id, input.ts);
     const [prev] = await db.select({ ts: stockCounts.ts }).from(stockCounts)
-      .where(and(eq(stockCounts.stockItemId, item.id), lt(stockCounts.ts, input.ts)))
+      .where(and(eq(stockCounts.stockItemId, item.id), lt(stockCounts.ts, input.ts), isNull(stockCounts.cancelledAt)))
       .orderBy(desc(stockCounts.ts)).limit(1);
     const { unitsSold, expectedSurplus } = await salesBetween(db, item.id, prev?.ts ?? null, input.ts);
     const variance = e.countedBase - theoretical;
@@ -231,7 +231,7 @@ async function countAlerts(
   // repeated high margin use for the same shift (pattern, not a single signal)
   if (kind !== "piece") {
     const last = await db.select({ m: stockCounts.marginUsedPct }).from(stockCounts)
-      .where(and(eq(stockCounts.stockItemId, item.id), eq(stockCounts.evaluatedShift, ev.shift), inArray(stockCounts.handover, ["morning_to_evening", "evening_to_morning"])))
+      .where(and(eq(stockCounts.stockItemId, item.id), eq(stockCounts.evaluatedShift, ev.shift), inArray(stockCounts.handover, ["morning_to_evening", "evening_to_morning"]), isNull(stockCounts.cancelledAt)))
       .orderBy(desc(stockCounts.ts)).limit(s.margin_warn_consecutive);
     if (last.length >= s.margin_warn_consecutive && last.every((r) => r.m !== null && Number(r.m) >= s.margin_warn_pct)) {
       await raiseAlert(db, {

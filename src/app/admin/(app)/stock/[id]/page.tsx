@@ -3,9 +3,10 @@ import { notFound } from "next/navigation";
 import { desc, eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { stockCounts, stockItems, stockMovements } from "@/db/schema";
-import { saveStockItemAction } from "@/admin/actions/main";
+import { cancelMovementAction, cancelStockCountAction, deleteStockItemAction, saveStockItemAction } from "@/admin/actions/main";
+import { cancelledMovementIds } from "@/server/corrections";
 import { HANDOVER_AR, type Handover } from "@/server/stock";
-import { Back, Flash, Money, PageTitle, Pager, one, type SP } from "@/admin/ui";
+import { Back, CancelForm, Flash, Money, PageTitle, Pager, one, type SP } from "@/admin/ui";
 import { formatTunis, SHIFT_AR, type Shift } from "@/lib/time";
 import { formatQty, formatSmall, type StockKind } from "@/lib/units";
 
@@ -26,6 +27,7 @@ export default async function StockItemPage({ params, searchParams }: { params: 
   const mvs = await db.select().from(stockMovements).where(eq(stockMovements.stockItemId, it.id)).orderBy(desc(stockMovements.ts), desc(stockMovements.id)).limit(51).offset((page - 1) * 50);
   const counts = await db.select().from(stockCounts).where(eq(stockCounts.stockItemId, it.id)).orderBy(desc(stockCounts.ts)).limit(60);
   const back = `/admin/stock/${it.id}`;
+  const cancelled = await cancelledMovementIds(db, mvs.map((m) => m.id));
   return (
     <>
       <Flash sp={sp} />
@@ -42,17 +44,21 @@ export default async function StockItemPage({ params, searchParams }: { params: 
             <label className="flex items-center gap-2"><input type="checkbox" name="active" defaultChecked={it.active} /> مفعّلة</label>
             <button className="btn">حفظ</button>
           </form>
+          <div className="mt-4 border-t pt-3">
+            <CancelForm action={deleteStockItemAction} back={back} id={it.id} label="حذف المادة" confirm="تأكيد الحذف" withReason={false} />
+            <p className="muted text-xs mt-1">تختفي من القوائم، وسجلّها يبقى في التقارير. غير ممكن إن كانت مستعملة في وصفة.</p>
+          </div>
         </section>
         <section className="card lg:col-span-2 overflow-x-auto">
           <h2 className="h2 mb-2">سجل الجرد والهامش</h2>
           <table className="tbl">
-            <thead><tr><th>الوقت</th><th>النوع</th><th>الشيفت المعني</th><th>نظري</th><th>معدود</th><th>الفرق</th><th>المبيعات</th><th>الفائض المتوقع</th><th>الهامش المستعمل</th><th>القيمة</th></tr></thead>
+            <thead><tr><th>الوقت</th><th>النوع</th><th>الشيفت المعني</th><th>نظري</th><th>معدود</th><th>الفرق</th><th>المبيعات</th><th>الفائض المتوقع</th><th>الهامش المستعمل</th><th>القيمة</th><th></th></tr></thead>
             <tbody>
               {counts.length === 0 && <tr><td colSpan={10} className="muted text-center">لا جرد بعد</td></tr>}
               {counts.map((c) => {
                 const m = c.marginUsedPct === null ? null : Number(c.marginUsedPct);
                 return (
-                  <tr key={c.id}>
+                  <tr key={c.id} className={c.cancelledAt ? "opacity-50 line-through" : ""}>
                     <td className="num">{formatTunis(c.ts)}</td><td className="text-xs">{HANDOVER_AR[c.handover as Handover]}</td>
                     <td className="text-xs">{c.businessDay} {SHIFT_AR[c.evaluatedShift as Shift]}</td>
                     <td className="num">{formatQty(k, c.theoreticalBase)}</td><td className="num">{formatQty(k, c.countedBase)}</td>
@@ -60,6 +66,7 @@ export default async function StockItemPage({ params, searchParams }: { params: 
                     <td className="num">{c.unitsSold}</td><td className="num">{formatSmall(k, Number(c.expectedSurplusBase))}</td>
                     <td>{m === null ? "—" : <span className={`badge ${m >= 100 ? "badge-red" : m >= 90 ? "badge-yellow" : "badge-green"}`}>{m}%</span>}</td>
                     <td><Money m={c.valueMillimes} /></td>
+                    <td className="no-underline">{c.cancelledAt ? <span className="badge badge-gray" title={c.cancelReason ?? ""}>ملغى</span> : <CancelForm action={cancelStockCountAction} back={back} id={c.id} />}</td>
                   </tr>
                 );
               })}
@@ -70,7 +77,7 @@ export default async function StockItemPage({ params, searchParams }: { params: 
         <section className="card lg:col-span-3 overflow-x-auto">
           <h2 className="h2 mb-2">الحركات (سجل غير قابل للتعديل)</h2>
           <table className="tbl">
-            <thead><tr><th>الوقت</th><th>النوع</th><th>الكمية</th><th>المرجع</th><th>ملاحظة</th><th>بواسطة</th></tr></thead>
+            <thead><tr><th>الوقت</th><th>النوع</th><th>الكمية</th><th>المرجع</th><th>ملاحظة</th><th>بواسطة</th><th></th></tr></thead>
             <tbody>
               {mvs.slice(0, 50).map((m) => (
                 <tr key={m.id}>
@@ -78,6 +85,8 @@ export default async function StockItemPage({ params, searchParams }: { params: 
                   <td className={`num ${m.deltaBase < 0 ? "text-red-700" : "text-green-700"}`}>{m.deltaBase > 0 ? "+" : ""}{formatSmall(k, m.deltaBase)}</td>
                   <td className="text-xs">{m.refType === "order" ? <Link className="underline" href={`/admin/orders/${m.refId}`}>طلب</Link> : m.refType ?? ""}</td>
                   <td className="text-xs">{m.note}</td><td className="muted text-xs">{m.createdBy}</td>
+                  <td>{cancelled.has(m.id) ? <span className="badge badge-gray">ملغاة</span>
+                    : ["purchase", "waste", "staff_consumption"].includes(m.type) ? <CancelForm action={cancelMovementAction} back={back} id={m.id} /> : null}</td>
                 </tr>
               ))}
             </tbody>

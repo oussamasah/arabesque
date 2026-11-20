@@ -16,6 +16,8 @@ export interface DeviceConfig {
   valid_tickets: { token_hashes: string[]; code_hashes: string[] };
   /** pay-later orders of this device still open on the server */
   open_orders?: string[];
+  /** open pay-later orders entered or corrected by the Owner (not in this tablet's local log) */
+  open_order_details?: { id: string; label: string; table_ref: string | null; ts: number; items: { product_id: number; qty: number }[] }[];
   config_version: string;
   server_time: number;
 }
@@ -170,19 +172,21 @@ export interface UnpaidOrder {
   created_at: number;
   items: { product_id: number; qty: number }[];
   table_ref?: string;
+  /** server label for orders entered/corrected by the Owner (e.g. ADM-0003) */
+  label?: string;
 }
 
 /**
  * Pay-later orders of this device not yet paid: created locally with payment "later", no local pay event,
  * and (once synced) still open on the server — so orders voided or settled by the Owner disappear.
  */
-export async function listUnpaid(serverOpen?: string[]): Promise<UnpaidOrder[]> {
+export async function listUnpaid(serverOpen?: string[], serverDetails?: DeviceConfig["open_order_details"]): Promise<UnpaidOrder[]> {
   const db = await posDb();
   const deviceId = await db.get("meta", "device_id");
   const all = (await db.getAll("events")).filter((e) => e.envelope.device_id === deviceId && e.status !== "rejected");
   const paid = new Set(all.filter((e) => e.envelope.type === "order.pay").map((e) => (e.envelope.payload as OrderPayPayload).order_id));
   const open = serverOpen ? new Set(serverOpen) : null;
-  return all
+  const local = all
     .filter((e) => e.envelope.type === "order.create" && (e.envelope.payload as OrderCreatePayload).payment === "later")
     .filter((e) => !paid.has(e.client_event_id))
     // just-synced orders stay visible until the next config refresh (≤ 60 s) confirms them as open
@@ -190,6 +194,11 @@ export async function listUnpaid(serverOpen?: string[]): Promise<UnpaidOrder[]> 
     .sort((a, b) => a.seq - b.seq)
     .map((e) => {
       const p = e.envelope.payload as OrderCreatePayload;
-      return { id: e.client_event_id, seq: e.seq, created_at: e.created_at, items: p.items, table_ref: p.table_ref };
+      return { id: e.client_event_id, seq: e.seq, created_at: e.created_at, items: p.items, table_ref: p.table_ref } as UnpaidOrder;
     });
+  const known = new Set(local.map((o) => o.id));
+  const remote = (serverDetails ?? [])
+    .filter((d) => !known.has(d.id) && !paid.has(d.id))
+    .map((d) => ({ id: d.id, seq: 0, created_at: d.ts, items: d.items, table_ref: d.table_ref ?? undefined, label: d.label }));
+  return [...local, ...remote].sort((a, b) => a.created_at - b.created_at);
 }

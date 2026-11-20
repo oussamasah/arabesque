@@ -2,8 +2,9 @@ import { desc, eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { expenses } from "@/db/schema";
 import { getSettings } from "@/server/settings";
-import { expenseAction, expenseDeactivateAction, expenseEndAction } from "@/admin/actions/main";
+import { expenseAction, expenseDeactivateAction, expenseEndAction, updateExpenseAction } from "@/admin/actions/main";
 import { Back, Flash, Money, PageTitle, type SP } from "@/admin/ui";
+import { millimesToInput } from "@/lib/money";
 import { formatTunis, shiftInfo, toTunisLocalInput } from "@/lib/time";
 
 export const dynamic = "force-dynamic";
@@ -62,6 +63,17 @@ export default async function ExpensesPage({ searchParams }: { searchParams: SP 
                   {e.active && !e.endDay && (
                     <form action={expenseEndAction} className="flex gap-1"><Back value="/admin/expenses" /><input type="hidden" name="id" value={e.id} /><input className="inp w-36" type="date" name="endDay" defaultValue={today} /><button className="btn btn-ghost btn-sm">إنهاء</button></form>
                   )}
+                  {e.active && <details className="inline-block"><summary className="btn btn-ghost btn-sm list-none cursor-pointer">تعديل</summary>
+                    <form action={updateExpenseAction} className="grid grid-cols-2 gap-1 mt-1 p-2 bg-white border rounded-lg min-w-72">
+                      <Back value="/admin/expenses" /><input type="hidden" name="id" value={e.id} />
+                      <input className="inp" name="category" defaultValue={e.category} placeholder="الفئة" />
+                      <input className="inp" name="label" defaultValue={e.label} required placeholder="الوصف" />
+                      <input className="inp" name="amount" defaultValue={millimesToInput(e.amountMillimes)} required dir="ltr" placeholder="المبلغ" />
+                      <input className="inp" type="date" name="startDay" defaultValue={e.startDay} />
+                      {e.kind === "fixed" ? <input className="inp" type="date" name="endDay" defaultValue={e.endDay ?? ""} /> : <input className="inp" name="invoiceRef" defaultValue={e.invoiceRef ?? ""} dir="ltr" placeholder="رقم الفاتورة" />}
+                      <button className="btn btn-sm">حفظ</button>
+                    </form>
+                  </details>}
                   {e.active && <form action={expenseDeactivateAction}><Back value="/admin/expenses" /><input type="hidden" name="id" value={e.id} /><button className="btn btn-ghost btn-sm">إيقاف (خطأ)</button></form>}
                 </td>
               </tr>
@@ -78,7 +90,19 @@ export default async function ExpensesPage({ searchParams }: { searchParams: SP 
               <tr key={e.id} className={!e.active ? "opacity-50 line-through" : ""}>
                 <td className="num">{e.startDay}</td><td>{e.category}{e.isPurchase && <span className="badge badge-blue mr-1">شراء</span>}</td><td>{e.label}</td><td><Money m={e.amountMillimes} /></td>
                 <td>{e.paidFrom === "drawer" ? <span className="badge badge-yellow">درج الشيفت</span> : "المالك"}</td><td className="num">{formatTunis(e.paidAt)}</td><td className="num">{e.invoiceRef ?? "—"}</td>
-                <td>{e.active && !e.isPurchase && <form action={expenseDeactivateAction}><Back value="/admin/expenses" /><input type="hidden" name="id" value={e.id} /><button className="btn btn-ghost btn-sm">إيقاف (خطأ)</button></form>}</td>
+                <td className="flex gap-1">{e.active && !e.isPurchase && <details className="inline-block"><summary className="btn btn-ghost btn-sm list-none cursor-pointer">تعديل</summary>
+                    <form action={updateExpenseAction} className="grid grid-cols-2 gap-1 mt-1 p-2 bg-white border rounded-lg min-w-72">
+                      <Back value="/admin/expenses" /><input type="hidden" name="id" value={e.id} />
+                      <input className="inp" name="category" defaultValue={e.category} placeholder="الفئة" />
+                      <input className="inp" name="label" defaultValue={e.label} required placeholder="الوصف" />
+                      <input className="inp" name="amount" defaultValue={millimesToInput(e.amountMillimes)} required dir="ltr" placeholder="المبلغ" />
+                      <input className="inp" type="date" name="startDay" defaultValue={e.startDay} />
+                      {e.kind === "fixed" ? <input className="inp" type="date" name="endDay" defaultValue={e.endDay ?? ""} /> : <input className="inp" name="invoiceRef" defaultValue={e.invoiceRef ?? ""} dir="ltr" placeholder="رقم الفاتورة" />}
+                      <button className="btn btn-sm">حفظ</button>
+                    </form>
+                  </details>}
+                  {e.active && !e.isPurchase && <form action={expenseDeactivateAction}><Back value="/admin/expenses" /><input type="hidden" name="id" value={e.id} /><button className="btn btn-ghost btn-sm">إيقاف (خطأ)</button></form>}
+                  {e.isPurchase && e.active && <a className="btn btn-ghost btn-sm" href="/admin/stock/purchase">إلغاء الشراء…</a>}</td>
               </tr>
             ))}
           </tbody>

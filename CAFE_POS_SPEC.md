@@ -339,6 +339,14 @@ Purpose: customers who take items free or on credit hand over a **printed paper 
 ### 7.7 Voids / corrections
 Admin only. Requires a reason. Sets order `void`, reverses its stock movements (`void` type), re-opens the ticket if any (and reverses credit charge), writes audit. Voids are listed per shift (counts feed the risk score).
 
+### 7.7b Owner corrections (confirmed by the Owner, 2026-11-20)
+The Owner can fix any mistake, always as a new record + audit entry (never a hard delete):
+cancel a purchase / opening stock / loss (reversing movement at the same time; purchase expense deactivated; average cost restored from the purchase time),
+cancel a stock count (its adjustment reversed; excluded from margin analysis) or a cash count, edit an expense (purchases: cancel instead),
+void a wrong price (previous price applies; past orders keep their snapshot), edit an order's items (old order voided, corrected order `ADM-…` created at the same time with the same payment/shift; pay-later corrected orders appear on the tablet),
+and soft-delete products, stock items (refused while used in a recipe) and customers (only without debt; unused tickets voided).
+Tablet ticket scanner uses the **front camera by default** (wall-mounted tablet; the customer shows the ticket), with a switch button.
+
 ### 7.8 Finance & profit
 Ranges are by `business_day`. Definitions (display both; the Owner's own description is the cash view):
 ```

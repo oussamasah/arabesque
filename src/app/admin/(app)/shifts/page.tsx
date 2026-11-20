@@ -3,8 +3,8 @@ import { getDb } from "@/db";
 import { cashCounts } from "@/db/schema";
 import { expectedCash, ordersForReconciliation, shiftRows, workerFor } from "@/server/finance";
 import { getSettings } from "@/server/settings";
-import { cashCountAction, defaultWorkersAction, rosterAction } from "@/admin/actions/main";
-import { Back, Flash, Money, PageTitle, RiskDot, one, type SP } from "@/admin/ui";
+import { cancelCashCountAction, cashCountAction, defaultWorkersAction, rosterAction } from "@/admin/actions/main";
+import { Back, CancelForm, Flash, Money, PageTitle, RiskDot, one, type SP } from "@/admin/ui";
 import { addDays, formatTunis, shiftInfo, SHIFT_AR, toTunisLocalInput, type Shift } from "@/lib/time";
 
 export const dynamic = "force-dynamic";
@@ -114,10 +114,11 @@ export default async function ShiftsPage({ searchParams }: { searchParams: SP })
           </table>
           <h3 className="font-bold mt-4 mb-1">سجل عدّ الكاش</h3>
           <table className="tbl">
-            <thead><tr><th>الوقت</th><th>الشيفت</th><th>المتوقع</th><th>المعدود</th><th>الفرق</th><th>تذاكر (متوقع/في الدرج)</th><th>من عدّ</th></tr></thead>
+            <thead><tr><th>الوقت</th><th>الشيفت</th><th>المتوقع</th><th>المعدود</th><th>الفرق</th><th>تذاكر (متوقع/في الدرج)</th><th>من عدّ</th><th></th></tr></thead>
             <tbody>
               {counts.map((c) => (
-                <tr key={c.id}><td className="num">{formatTunis(c.ts)}</td><td>{c.businessDay} {SHIFT_AR[c.shift as Shift]}</td><td><Money m={c.expectedCashMillimes} /></td><td><Money m={c.countedCashMillimes} /></td><td><Money m={c.varianceMillimes} /></td><td className="num">{c.ticketsExpected} / {c.ticketsInDrawer}</td><td>{c.countedBy}</td></tr>
+                <tr key={c.id} className={c.cancelledAt ? "opacity-50" : ""}><td className="num">{formatTunis(c.ts)}</td><td>{c.businessDay} {SHIFT_AR[c.shift as Shift]}</td><td><Money m={c.expectedCashMillimes} /></td><td><Money m={c.countedCashMillimes} /></td><td><Money m={c.varianceMillimes} /></td><td className="num">{c.ticketsExpected} / {c.ticketsInDrawer}</td><td>{c.countedBy}</td>
+                  <td>{c.cancelledAt ? <span className="badge badge-gray" title={c.cancelReason ?? ""}>ملغى</span> : <CancelForm action={cancelCashCountAction} back={back} id={c.id} />}</td></tr>
               ))}
             </tbody>
           </table>

@@ -79,6 +79,7 @@ export const products = pgTable("products", {
   image: text("image"), // e.g. /products/espresso.svg (served locally, cached offline on the tablet)
   sortOrder: integer("sort_order").default(0).notNull(),
   active: boolean("active").default(true).notNull(),
+  deletedAt: ts("deleted_at"), // soft delete: hidden everywhere, history kept
   createdAt: ts("created_at").defaultNow().notNull(),
 });
 
@@ -88,6 +89,8 @@ export const productPrices = pgTable("product_prices", {
   priceMillimes: big("price_millimes").notNull(),
   effectiveFrom: ts("effective_from").notNull(),
   createdBy: text("created_by"),
+  voidedAt: ts("voided_at"), // a wrong price is voided (never deleted); past orders keep their snapshot
+  voidedBy: text("voided_by"),
 }, (t) => [index("product_prices_pid_eff").on(t.productId, t.effectiveFrom)]);
 
 // ---------------------------------------------------------------- stock
@@ -99,6 +102,7 @@ export const stockItems = pgTable("stock_items", {
   costPerBase: numeric("cost_per_base", { precision: 24, scale: 10 }).notNull().default("0"),
   minQtyBase: big("min_qty_base").notNull().default(0),
   active: boolean("active").notNull().default(true),
+  deletedAt: ts("deleted_at"),
 });
 
 export const stockCostHistory = pgTable("stock_cost_history", {
@@ -186,6 +190,7 @@ export const customers = pgTable("customers", {
   note: text("note"),
   lowTicketsThreshold: integer("low_tickets_threshold"),
   active: boolean("active").notNull().default(true),
+  deletedAt: ts("deleted_at"),
 });
 
 export const ticketSheets = pgTable("ticket_sheets", {
@@ -275,6 +280,9 @@ export const stockCounts = pgTable("stock_counts", {
   unitsSold: big("units_sold").notNull().default(0),
   countedBy: text("counted_by"),
   note: text("note"),
+  cancelledAt: ts("cancelled_at"), // a wrong count is cancelled: its stock adjustment is reversed
+  cancelledBy: text("cancelled_by"),
+  cancelReason: text("cancel_reason"),
 }, (t) => [index("stock_counts_item_ts").on(t.stockItemId, t.ts)]);
 
 export const cashCounts = pgTable("cash_counts", {
@@ -290,6 +298,9 @@ export const cashCounts = pgTable("cash_counts", {
   ticketsInDrawer: integer("tickets_in_drawer").notNull(),
   countedBy: text("counted_by"),
   note: text("note"),
+  cancelledAt: ts("cancelled_at"),
+  cancelledBy: text("cancelled_by"),
+  cancelReason: text("cancel_reason"),
 });
 
 // ---------------------------------------------------------------- sync inbox, audit, alerts

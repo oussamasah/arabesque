@@ -372,3 +372,57 @@ export async function openingStockAction(fd: FormData) {
     return "/admin/stock";
   }, "تم إدخال المخزون الافتتاحي ✓");
 }
+
+// ---------------------------------------------------------------- corrections (cancel / edit / soft delete, all audited)
+import {
+  cancelCashCount, cancelMovement, cancelStockCount, deleteCustomer, deleteProduct, deleteStockItem, editOrderItems,
+  updateExpense, voidPrice,
+} from "@/server/corrections";
+
+export async function cancelMovementAction(fd: FormData) {
+  await run(fd, async ({ db, actor, f }) => { await cancelMovement(db, f.int("id"), f.str("reason", true), actor); }, "تم الإلغاء ✓");
+}
+
+export async function cancelStockCountAction(fd: FormData) {
+  await run(fd, async ({ db, actor, f }) => { await cancelStockCount(db, f.int("id"), f.str("reason", true), actor); }, "تم إلغاء الجرد ✓");
+}
+
+export async function cancelCashCountAction(fd: FormData) {
+  await run(fd, async ({ db, actor, f }) => { await cancelCashCount(db, f.int("id"), f.str("reason", true), actor); }, "تم إلغاء عدّ الكاش ✓");
+}
+
+export async function updateExpenseAction(fd: FormData) {
+  await run(fd, async ({ db, actor, f }) => {
+    await updateExpense(db, f.int("id"), {
+      category: f.str("category"), label: f.str("label", true), amountMillimes: f.money("amount"),
+      startDay: f.str("startDay"), endDay: f.opt("endDay"), invoiceRef: f.opt("invoiceRef"),
+    }, actor);
+  });
+}
+
+export async function voidPriceAction(fd: FormData) {
+  await run(fd, async ({ db, actor, f }) => { await voidPrice(db, f.int("id"), actor); }, "تم حذف السعر ✓");
+}
+
+export async function editOrderAction(fd: FormData) {
+  await run(fd, async ({ db, actor, ip, f }) => {
+    const items: { product_id: number; qty: number }[] = [];
+    for (const [k, v] of f.raw().entries()) {
+      if (k.startsWith("qty_") && String(v).trim() && Number(v) > 0) items.push({ product_id: Number(k.slice(4)), qty: Number(v) });
+    }
+    const r = await editOrderItems(db, f.str("orderId", true), items, actor, ip);
+    return `/admin/orders/${r.id}`;
+  }, "تم تعديل الطلب ✓");
+}
+
+export async function deleteProductAction(fd: FormData) {
+  await run(fd, async ({ db, actor, f }) => { await deleteProduct(db, f.int("id"), actor); return "/admin/products"; }, "تم حذف المنتج ✓");
+}
+
+export async function deleteStockItemAction(fd: FormData) {
+  await run(fd, async ({ db, actor, f }) => { await deleteStockItem(db, f.int("id"), actor); return "/admin/stock"; }, "تم حذف المادة ✓");
+}
+
+export async function deleteCustomerAction(fd: FormData) {
+  await run(fd, async ({ db, actor, f }) => { await deleteCustomer(db, f.int("id"), actor); return "/admin/customers"; }, "تم حذف الزبون ✓");
+}

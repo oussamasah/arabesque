@@ -129,7 +129,7 @@ export default function PosApp() {
   }, [paired, syncNow, refreshConfig]);
 
   const refreshUnpaid = useCallback(async () => {
-    try { setUnpaid(await listUnpaid(config?.open_orders)); } catch { /* ignore */ }
+    try { setUnpaid(await listUnpaid(config?.open_orders, config?.open_order_details)); } catch { /* ignore */ }
   }, [config]);
   useEffect(() => { if (paired) void refreshUnpaid(); }, [paired, refreshUnpaid]);
 
@@ -198,7 +198,7 @@ export default function PosApp() {
         ...(payment === "ticket" && t?.tokenHash ? { ticket_token_hash: t.tokenHash } : {}),
         ...(payment === "ticket" && t?.codeHash ? { ticket_code_hash: t.codeHash } : {}),
       });
-      const label = labelOf(payTarget.seq);
+      const label = (payTarget.label ?? labelOf(payTarget.seq));
       setPayTarget(null); setStep("cart"); setTicket({ status: "idle" }); setCodeInput("");
       flash("تم الدفع ✓", label);
       setPending(await pendingCount());
@@ -388,7 +388,7 @@ export default function PosApp() {
         if (now.getHours() >= m && now.getHours() < e) start.setHours(m, 0, 0, 0);
         else { start.setHours(e, 0, 0, 0); if (now.getHours() < m) start.setDate(start.getDate() - 1); }
         const q = unpaidQuery.trim();
-        const list = unpaid.filter((o) => !q || (o.table_ref ?? "").includes(q) || labelOf(o.seq).includes(q));
+        const list = unpaid.filter((o) => !q || (o.table_ref ?? "").includes(q) || (o.label ?? labelOf(o.seq)).includes(q));
         const old = unpaid.filter((o) => o.created_at < start.getTime()).length;
         return (
           <div className="fixed inset-0 z-40 bg-[var(--paper)] flex flex-col">
@@ -408,7 +408,7 @@ export default function PosApp() {
                       <button key={o.id} onClick={() => { setPayTarget(o); setStep("pay"); }}
                         className={`text-right bg-white rounded-2xl p-3 border-4 shadow-sm active:scale-[.98] flex flex-col gap-1 ${prev ? "border-red-500" : "border-transparent"}`}>
                         <div className="flex items-baseline justify-between gap-2">
-                          <span className="text-2xl font-black truncate">{o.table_ref || labelOf(o.seq)}</span>
+                          <span className="text-2xl font-black truncate">{o.table_ref || (o.label ?? labelOf(o.seq))}</span>
                           <span className="text-lg text-gray-500 shrink-0" dir="ltr">{new Date(o.created_at).toLocaleTimeString("fr-TN", { hour: "2-digit", minute: "2-digit", hour12: false })}</span>
                         </div>
                         {prev && <span className="self-start bg-red-100 text-red-700 rounded-full px-3 text-base font-bold">شيفت سابق — على العامل</span>}
@@ -426,7 +426,7 @@ export default function PosApp() {
 
       {step === "pay" && payTarget && (
         <Modal>
-          <h2 className="text-3xl font-bold mb-2">دفع {payTarget.table_ref || labelOf(payTarget.seq)}</h2>
+          <h2 className="text-3xl font-bold mb-2">دفع {payTarget.table_ref || (payTarget.label ?? labelOf(payTarget.seq))}</h2>
           <ul className="text-2xl space-y-1 mb-4">
             {payTarget.items.map((it) => (
               <li key={it.product_id} className="flex justify-between border-b pb-1"><span>{products.find((p) => p.id === it.product_id)?.name_ar ?? "?"}</span><span className="font-black">× {it.qty}</span></li>

@@ -5,6 +5,7 @@ import { stockItems } from "@/db/schema";
 import { lossAction } from "@/admin/actions/main";
 import { Back, Flash, PageTitle, type SP } from "@/admin/ui";
 import { bigUnitLabel, smallUnitLabel, type StockKind } from "@/lib/units";
+import { RecentMovements } from "@/admin/RecentMovements";
 
 export const dynamic = "force-dynamic";
 
@@ -49,6 +50,7 @@ export default async function LossPage({ searchParams }: { searchParams: SP }) {
         </details>
         <button className="btn text-lg px-8 py-3">تسجيل</button>
       </form>
+      <RecentMovements types={["waste", "staff_consumption"]} back="/admin/stock/loss" title="آخر التالف / استهلاك العمال" />
       <p className="muted text-xs mt-3 max-w-xl">{items.length ? "" : "لا توجد مواد."} هذه الخسائر «مُفسَّرة»: لا تُحسب كنقص في الجرد.</p>
     </>
   );

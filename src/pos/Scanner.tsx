@@ -2,12 +2,29 @@
 import { useEffect, useRef, useState } from "react";
 import jsQR from "jsqr";
 
+type Facing = "user" | "environment";
+const FACING_KEY = "pos-camera-facing";
+
+function initialFacing(): Facing {
+  // wall-mounted tablet: the customer shows the ticket to the FRONT camera by default
+  try { return (localStorage.getItem(FACING_KEY) as Facing) === "environment" ? "environment" : "user"; } catch { return "user"; }
+}
+
 /** Camera QR scanner (BarcodeDetector when available, jsQR fallback). Calls onResult once. */
 export function Scanner({ onResult }: { onResult: (text: string) => void }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [error, setError] = useState<string | null>(null);
+  const [facing, setFacing] = useState<Facing>("user");
   const done = useRef(false);
+
+  useEffect(() => { setFacing(initialFacing()); }, []);
+  const switchCamera = () => {
+    const next: Facing = facing === "user" ? "environment" : "user";
+    try { localStorage.setItem(FACING_KEY, next); } catch { /* ignore */ }
+    setError(null);
+    setFacing(next);
+  };
 
   useEffect(() => {
     let stream: MediaStream | null = null;
@@ -28,9 +45,9 @@ export function Scanner({ onResult }: { onResult: (text: string) => void }) {
         setError("المتصفح لا يسمح بالكاميرا (في Fully Kiosk: فعّل Enable Webcam Access) — اكتب الرمز");
         return;
       }
-      // back camera first, then any camera (some tablets / kiosk browsers refuse facingMode)
+      // chosen camera first (front by default), then any camera (some tablets / kiosk browsers refuse facingMode)
       const attempts: MediaStreamConstraints[] = [
-        { video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 } }, audio: false },
+        { video: { facingMode: { ideal: facing }, width: { ideal: 1280 } }, audio: false },
         { video: true, audio: false },
       ];
       let lastErr: unknown = null;
@@ -78,7 +95,7 @@ export function Scanner({ onResult }: { onResult: (text: string) => void }) {
         }
         if (!text) {
           const img = ctx.getImageData(0, 0, w, h);
-          text = jsQR(img.data, w, h, { inversionAttempts: "dontInvert" })?.data ?? null;
+          text = jsQR(img.data, w, h, { inversionAttempts: "attemptBoth" })?.data ?? null;
         }
         if (text && !done.current) {
           done.current = true;
@@ -94,14 +111,19 @@ export function Scanner({ onResult }: { onResult: (text: string) => void }) {
       cancelAnimationFrame(raf);
       stream?.getTracks().forEach((t) => t.stop());
     };
-  }, [onResult]);
+  }, [onResult, facing]);
 
   return (
     <div className="relative w-full aspect-video bg-black rounded-2xl overflow-hidden">
-      <video ref={videoRef} className="w-full h-full object-cover" playsInline muted />
+      {/* front camera preview is mirrored like a mirror; the image analysed for the QR code is not */}
+      <video ref={videoRef} className="w-full h-full object-cover" style={{ transform: facing === "user" ? "scaleX(-1)" : undefined }} playsInline muted />
       <canvas ref={canvasRef} className="hidden" />
       <div className="absolute inset-[15%] border-4 border-white/70 rounded-2xl pointer-events-none" />
       {error && <div className="absolute inset-0 flex items-center justify-center text-white text-2xl bg-black/70 p-6 text-center">{error}</div>}
+      <button type="button" onClick={switchCamera}
+        className="absolute bottom-3 left-3 rounded-full bg-white/90 text-black px-4 py-2 text-lg font-bold shadow">
+        🔄 {facing === "user" ? "الكاميرا الخلفية" : "الكاميرا الأمامية"}
+      </button>
     </div>
   );
 }

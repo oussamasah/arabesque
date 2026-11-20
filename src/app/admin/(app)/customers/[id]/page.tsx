@@ -4,8 +4,8 @@ import { desc, eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { creditLedger, customers, orders, ticketSheets } from "@/db/schema";
 import { customerBalance, remainingTickets } from "@/server/tickets";
-import { creditAdjustAction, repaymentAction, saveCustomerAction } from "@/admin/actions/main";
-import { Back, Flash, Money, PageTitle, type SP } from "@/admin/ui";
+import { creditAdjustAction, deleteCustomerAction, repaymentAction, saveCustomerAction } from "@/admin/actions/main";
+import { Back, CancelForm, Flash, Money, PageTitle, type SP } from "@/admin/ui";
 import { formatTunis, toTunisLocalInput } from "@/lib/time";
 
 export const dynamic = "force-dynamic";
@@ -76,6 +76,10 @@ export default async function CustomerPage({ params, searchParams }: { params: P
             <label className="flex gap-2 items-center"><input type="checkbox" name="active" defaultChecked={c.active} /> نشط</label>
             <button className="btn">حفظ</button>
           </form>
+          <div className="mt-4 border-t pt-3">
+            <CancelForm action={deleteCustomerAction} back={back} id={c.id} label="حذف الزبون" confirm="تأكيد الحذف" withReason={false} />
+            <p className="muted text-xs mt-1">ممكن فقط إن لم يكن عليه دين. تذاكره غير المستعملة تُلغى.</p>
+          </div>
         </section>
         <section className="card lg:col-span-2">
           <h2 className="h2 mb-2">أوراق التذاكر</h2>
