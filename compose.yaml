@@ -1,0 +1,44 @@
+# Production stack (VPS): app + its own PostgreSQL.
+# The app joins the existing Caddy network (cinify_default) under the alias "cafe-app";
+# the database is only on the private "default" network and is never exposed.
+# Secrets live in ./.env on the server (chmod 600) — see deploy/README.md.
+name: cafe
+
+services:
+  app:
+    build: .
+    image: cafe-pos:latest
+    restart: unless-stopped
+    env_file: .env
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      default: {}
+      edge:
+        aliases: [cafe-app]
+
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: cafe
+      POSTGRES_USER: cafe
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      TZ: Africa/Tunis
+    volumes:
+      - dbdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cafe -d cafe"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks: [default]
+
+networks:
+  edge:
+    external: true
+    name: cinify_default
+
+volumes:
+  dbdata: {}

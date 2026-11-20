@@ -1,0 +1,6 @@
+# Café POS — add this block to the Caddyfile used by the cinify-caddy-1 container, then:
+#   docker exec cinify-caddy-1 caddy reload --config /etc/caddy/Caddyfile
+cafe.hidevai.com {
+	encode zstd gzip
+	reverse_proxy cafe-app:3000
+}

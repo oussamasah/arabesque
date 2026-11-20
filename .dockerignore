@@ -1,0 +1,12 @@
+node_modules
+.next
+data
+data-test
+backups
+.env
+.env.*
+!.env.example
+.git
+.claude
+tests
+*.log
