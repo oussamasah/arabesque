@@ -137,7 +137,15 @@ export async function countAction(fd: FormData) {
     }
     if (!entries.length) throw new Error("أدخل كمية مادة واحدة على الأقل");
     const ts = f.time("ts");
-    const rows = await recordCount(db, { ts, handover: f.str("handover", true) as Handover, entries, countedBy: f.opt("countedBy"), note: f.opt("note") }, actor);
+    // "auto": pick the handover from the count time (around evening start = morning handover, around morning start = evening handover)
+    let handover = (f.str("handoverOverride") || f.str("handover", true)) as Handover | "auto";
+    if (handover === "auto") {
+      const st = await getSettings(db);
+      const h = Number(new Intl.DateTimeFormat("en-GB", { timeZone: "Africa/Tunis", hour: "2-digit", hourCycle: "h23" }).format(ts));
+      const near = (x: number) => Math.min(Math.abs(h - x), 24 - Math.abs(h - x)) <= 2;
+      handover = near(st.evening_start_hour) ? "morning_to_evening" : near(st.morning_start_hour) ? "evening_to_morning" : "unannounced";
+    }
+    const rows = await recordCount(db, { ts, handover, entries, countedBy: f.opt("countedBy"), note: f.opt("note") }, actor);
     return `/admin/stock/count?done=${rows.map((r) => r.id).join(",")}`;
   }, "تم تسجيل الجرد ✓");
 }
@@ -315,4 +323,52 @@ export async function adminPayAction(fd: FormData) {
 
 export async function unpaidLossAction(fd: FormData) {
   await run(fd, async ({ db, actor, ip, f }) => { await markOrderUnpaidLoss(db, f.str("orderId", true), f.str("reason", true), actor, ip); }, "تم التسجيل كغير مدفوع ✓");
+}
+
+/** A supplier invoice with one or more items (simple purchase page). */
+export async function purchaseInvoiceAction(fd: FormData) {
+  await run(fd, async ({ db, actor, f }) => {
+    const items = await db.select().from(stockItems);
+    const drawer = f.bool("fromDrawer");
+    const ts = f.str("ts") ? f.time("ts") : new Date();
+    const invoiceRef = f.opt("invoiceRef");
+    if (drawer && !invoiceRef) throw new Error("دُفع من الدرج: رقم الفاتورة مطلوب");
+    let n = 0;
+    for (let i = 0; i < 12; i++) {
+      const id = f.str(`item_${i}`), qty = f.str(`qty_${i}`), total = f.str(`total_${i}`);
+      if (!id && !qty && !total) continue;
+      const it = items.find((x) => x.id === Number(id));
+      if (!it) throw new Error(`السطر ${i + 1}: اختر المادة`);
+      if (!qty) throw new Error(`"${it.nameAr}": الكمية مطلوبة`);
+      if (!total) throw new Error(`"${it.nameAr}": السعر مطلوب`);
+      await recordPurchase(db, {
+        stockItemId: it.id, qtyBase: bigToBase(it.kind as StockKind, qty), totalMillimes: f.money(`total_${i}`),
+        ts, paidFrom: drawer ? "drawer" : "owner", paidAt: drawer ? ts : null, invoiceRef, note: f.opt("note"),
+      }, actor);
+      n++;
+    }
+    if (!n) throw new Error("أضف مادة واحدة على الأقل");
+    return "/admin/stock";
+  }, "تم تسجيل الشراء ✓");
+}
+
+/** One-time opening stock: what is physically in the café now (no expense is created). */
+export async function openingStockAction(fd: FormData) {
+  await run(fd, async ({ db, actor, f }) => {
+    const items = await db.select().from(stockItems).where(eq(stockItems.active, true));
+    let n = 0;
+    for (const it of items) {
+      const qty = f.str(`qty_${it.id}`);
+      if (!qty) continue;
+      const qtyBase = bigToBase(it.kind as StockKind, qty);
+      if (qtyBase <= 0) continue;
+      await recordPurchase(db, {
+        stockItemId: it.id, qtyBase, totalMillimes: f.optMoney(`value_${it.id}`) ?? 0, ts: new Date(),
+        paidFrom: "owner", opening: true, note: "مخزون افتتاحي",
+      }, actor);
+      n++;
+    }
+    if (!n) throw new Error("أدخل كمية مادة واحدة على الأقل");
+    return "/admin/stock";
+  }, "تم إدخال المخزون الافتتاحي ✓");
 }
