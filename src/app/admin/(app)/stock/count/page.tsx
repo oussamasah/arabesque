@@ -62,13 +62,15 @@ export default async function CountPage({ searchParams }: { searchParams: SP }) 
         <input type="hidden" name="handover" value="auto" />
         <label className="block max-w-sm"><span className="lbl">وقت الجرد — اتركه فارغاً إن عُدّ الآن، أو اكتب الوقت المكتوب على الورقة</span>
           <input className="inp" type="datetime-local" name="ts" max={toTunisLocalInput(new Date(Date.now() + 60_000))} /></label>
-        <div className="grid grid-cols-[1fr_9rem] gap-2 muted text-sm px-1"><span>المادة</span><span>الكمية المعدودة</span></div>
+        <div className="grid grid-cols-[1fr_8rem_9rem] gap-2 muted text-sm px-1"><span>المادة</span><span>المتوقع الآن</span><span>الكمية المعدودة</span></div>
         {items.map((it) => (
-          <div key={it.id} className="grid grid-cols-[1fr_9rem] gap-2 items-center">
+          <div key={it.id} className="grid grid-cols-[1fr_8rem_9rem] gap-2 items-center">
             <span className="font-semibold">{it.nameAr} <span className="muted text-sm font-normal">({bigUnitLabel(it.kind as StockKind)})</span></span>
+            <span className="num text-sm bg-gray-50 rounded-lg px-2 py-2 text-center" title="ما يقوله النظام حسب الطلبات والمشتريات">{formatQty(it.kind as StockKind, it.qtyBase)}</span>
             <input className="inp" name={`count_${it.id}`} inputMode="decimal" dir="ltr" />
           </div>
         ))}
+        <p className="muted text-xs">«المتوقع الآن» = ما يقوله النظام حسب الطلبات والمشتريات حتى هذه اللحظة. بعد التسجيل يصبح المخزون = الكمية المعدودة. إن كتبت وقتاً سابقاً فالمقارنة تتم مع المتوقع في ذلك الوقت.</p>
         <details>
           <summary className="cursor-pointer muted text-sm">خيارات أخرى (نوع الجرد، من عدّ، ملاحظة)</summary>
           <div className="grid md:grid-cols-3 gap-3 mt-2">
