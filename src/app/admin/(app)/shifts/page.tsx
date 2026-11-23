@@ -103,7 +103,7 @@ export default async function ShiftsPage({ searchParams }: { searchParams: SP })
               {rows.slice().reverse().map((r) => (
                 <tr key={r.businessDay + r.shift}>
                   <td className="num">{r.businessDay}</td><td>{SHIFT_AR[r.shift]}</td><td>{r.worker}</td><td className="num">{r.orders}</td>
-                  <td><Money m={r.salesCash} /></td><td className="num">{r.ticketOrders}</td><td className="num">{r.voids}</td><td className="num">{r.pending}</td><td>{r.unpaid ? <span className="badge badge-red"><Money m={r.owedByWorker} /> ({r.unpaid})</span> : <span className="num">—</span>}</td>
+                  <td><Money m={r.cashValue} /></td><td className="num">{r.ticketOrders}</td><td className="num">{r.voids}</td><td className="num">{r.pending}</td><td>{r.unpaid ? <span className="badge badge-red"><Money m={r.owedByWorker} /> ({r.unpaid})</span> : <span className="num">—</span>}</td>
                   <td className="num">{r.marginUsedAvg ?? "—"}{r.marginUsedMax !== null ? ` / ${r.marginUsedMax}` : ""}</td>
                   <td>{r.cashVariance === null ? <span className="muted">—</span> : <Money m={r.cashVariance} />}</td>
                   <td>{r.ticketMismatch === null ? "—" : r.ticketMismatch ? <span className="badge badge-red">لا</span> : <span className="badge badge-green">نعم</span>}</td>

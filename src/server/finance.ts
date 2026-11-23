@@ -195,7 +195,7 @@ export async function profitSummary(db: Exec, from: string, to: string): Promise
 }
 
 export interface ShiftRow {
-  businessDay: string; shift: Shift; worker: string; orders: number; voids: number; ticketOrders: number; ticketValue: number; totalValue: number; pending: number;
+  businessDay: string; shift: Shift; worker: string; orders: number; voids: number; ticketOrders: number; ticketValue: number; totalValue: number; cashValue: number; pending: number;
   /** orders served in this shift that were not paid (still pending, or recorded as left without paying) */
   unpaid: number;
   /** value of those orders: owed by the shift worker until paid */
@@ -214,6 +214,7 @@ export async function shiftRows(db: Exec, from: string, to: string): Promise<Shi
     voids: sql<string>`count(*) filter (where ${orders.status} = 'void')`,
     tk: sql<string>`count(*) filter (where ${orders.status} <> 'void' and ${orders.paymentType} = 'ticket')`,
     tkv: sql<string>`coalesce(sum(${orders.totalMillimes}) filter (where ${orders.status} <> 'void' and ${orders.paymentType} = 'ticket'), 0)`,
+    cashv: sql<string>`coalesce(sum(${orders.totalMillimes}) filter (where ${orders.status} <> 'void' and ${orders.paymentType} = 'cash'), 0)`,
     tot: sql<string>`coalesce(sum(${orders.totalMillimes}) filter (where ${orders.status} <> 'void'), 0)`,
     pending: sql<string>`count(*) filter (where ${orders.status} = 'pending_review')`,
     unpaid: sql<string>`count(*) filter (where ${orders.status} <> 'void' and ${orders.paymentType} in ('pending','loss'))`,
@@ -243,7 +244,7 @@ export async function shiftRows(db: Exec, from: string, to: string): Promise<Shi
       const worker = rr?.workerName || (sh === "morning" ? s.default_worker_morning : s.default_worker_evening) || "—";
       const row: ShiftRow = {
         businessDay: d, shift: sh, worker,
-        orders: Number(o?.n ?? 0), voids: Number(o?.voids ?? 0), ticketOrders: Number(o?.tk ?? 0), ticketValue: Number(o?.tkv ?? 0), totalValue: Number(o?.tot ?? 0), pending: Number(o?.pending ?? 0),
+        orders: Number(o?.n ?? 0), voids: Number(o?.voids ?? 0), ticketOrders: Number(o?.tk ?? 0), ticketValue: Number(o?.tkv ?? 0), totalValue: Number(o?.tot ?? 0), cashValue: Number(o?.cashv ?? 0), pending: Number(o?.pending ?? 0),
         salesCash: Number(pr?.cash ?? 0),
         unpaid: Number(o?.unpaid ?? 0),
         owedByWorker: Number(o?.owed ?? 0),
