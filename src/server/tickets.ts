@@ -1,6 +1,6 @@
 import "server-only";
 import crypto from "node:crypto";
-import { and, eq, or, sql } from "drizzle-orm";
+import { and, eq, isNull, or, sql } from "drizzle-orm";
 import { creditLedger, customers, tickets, ticketSheets } from "@/db/schema";
 import type { Exec } from "@/db";
 import { audit, raiseAlert, resolveAlerts } from "./audit";
@@ -63,7 +63,7 @@ export async function issueSheet(db: Exec, input: {
 
 export async function sheetForPrint(db: Exec, sheetId: number) {
   const [sheet] = await db.select().from(ticketSheets).where(eq(ticketSheets.id, sheetId));
-  if (!sheet) throw new Error("ورقة غير موجودة");
+  if (!sheet || sheet.deletedAt) throw new Error("ورقة غير موجودة");
   const rows = await db.select().from(tickets).where(eq(tickets.sheetId, sheetId)).orderBy(tickets.shortCode);
   return {
     sheet,
@@ -78,6 +78,42 @@ export async function voidTicket(db: Exec, ticketId: string, reason: string, act
   await db.update(tickets).set({ status: "void", note: [t.note, `ملغاة: ${reason}`].filter(Boolean).join(" — ") }).where(eq(tickets.id, ticketId));
   await audit(db, actor, "ticket.void", "ticket", ticketId, t, { status: "void", reason });
   if (t.customerId) await checkLowTickets(db, t.customerId);
+}
+
+/**
+ * Edit a sheet: note, type and cap. Used tickets are history and keep their type/cap;
+ * only still-valid (issued) tickets follow the change (credit is charged at use, so changing the type of unused tickets is safe).
+ */
+export async function updateSheet(db: Exec, sheetId: number, input: { note?: string | null; type: "free" | "credit"; maxAmountMillimes?: number | null }, actor: string) {
+  const [before] = await db.select().from(ticketSheets).where(eq(ticketSheets.id, sheetId));
+  if (!before || before.deletedAt) throw new Error("ورقة غير موجودة");
+  if (!["free", "credit"].includes(input.type)) throw new Error("نوع غير صالح");
+  if (input.maxAmountMillimes != null) { assertInt(input.maxAmountMillimes, "cap"); if (input.maxAmountMillimes <= 0) throw new Error("السقف يجب أن يكون أكبر من صفر"); }
+  const [row] = await db.update(ticketSheets).set({ note: input.note || null, type: input.type, maxAmountMillimes: input.maxAmountMillimes ?? null })
+    .where(eq(ticketSheets.id, sheetId)).returning();
+  await db.update(tickets).set({ note: input.note || null, type: input.type, maxAmountMillimes: input.maxAmountMillimes ?? null })
+    .where(and(eq(tickets.sheetId, sheetId), eq(tickets.status, "issued")));
+  await audit(db, actor, "ticket.update_sheet", "ticket_sheet", sheetId, before, row);
+  return row;
+}
+
+/** Delete a sheet: every unused ticket is voided (tablets stop accepting them); used tickets and their orders are untouched. */
+export async function deleteSheet(db: Exec, sheetId: number, actor: string) {
+  const [before] = await db.select().from(ticketSheets).where(eq(ticketSheets.id, sheetId));
+  if (!before || before.deletedAt) throw new Error("ورقة غير موجودة");
+  const voided = await db.update(tickets).set({ status: "void", note: "ورقة محذوفة" }).where(and(eq(tickets.sheetId, sheetId), eq(tickets.status, "issued"))).returning({ id: tickets.id });
+  await db.update(ticketSheets).set({ deletedAt: new Date() }).where(eq(ticketSheets.id, sheetId));
+  await audit(db, actor, "ticket.delete_sheet", "ticket_sheet", sheetId, before, { deleted: true, voided: voided.length });
+  await checkLowTickets(db, before.customerId);
+  return voided.length;
+}
+
+/** Edit one ticket's note (status changes go through void / cancelling the order that used it). */
+export async function updateTicketNote(db: Exec, ticketId: string, note: string | null, actor: string) {
+  const [t] = await db.select().from(tickets).where(eq(tickets.id, ticketId));
+  if (!t) throw new Error("تذكرة غير موجودة");
+  await db.update(tickets).set({ note: note || null }).where(eq(tickets.id, ticketId));
+  await audit(db, actor, "ticket.update", "ticket", ticketId, { note: t.note }, { note });
 }
 
 export async function findTicketByHash(db: Exec, h: { tokenHash?: string | null; codeHash?: string | null }) {

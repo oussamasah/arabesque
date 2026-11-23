@@ -8,7 +8,7 @@ import {
   createStockItem, recordCount, recordExplainedLoss, recordPurchase, updateStockItem, type Handover,
 } from "@/server/stock";
 import {
-  createCustomer, issueSheet, recordCreditAdjustment, recordRepayment, updateCustomer, voidTicket,
+  createCustomer, deleteSheet, issueSheet, recordCreditAdjustment, recordRepayment, updateCustomer, updateSheet, updateTicketNote, voidTicket,
 } from "@/server/tickets";
 import { adminPayOrder, approveOrder, createManualOrder, markOrderUnpaidLoss, voidOrder } from "@/server/orders";
 import { createExpense, deactivateExpense, endFixedExpense, recordCashCount, setRoster } from "@/server/finance";
@@ -170,6 +170,20 @@ export async function issueSheetAction(fd: FormData) {
 
 export async function voidTicketAction(fd: FormData) {
   await run(fd, async ({ db, actor, f }) => { await voidTicket(db, f.str("ticketId", true), f.str("reason") || "إلغاء", actor); }, "تم إلغاء التذكرة ✓");
+}
+
+export async function updateSheetAction(fd: FormData) {
+  await run(fd, async ({ db, actor, f }) => {
+    await updateSheet(db, f.int("sheetId"), { note: f.opt("note"), type: f.str("type") === "credit" ? "credit" : "free", maxAmountMillimes: f.optMoney("cap") }, actor);
+  }, "تم حفظ تعديل الورقة ✓");
+}
+
+export async function deleteSheetAction(fd: FormData) {
+  await run(fd, async ({ db, actor, f }) => { await deleteSheet(db, f.int("sheetId"), actor); return "/admin/tickets"; }, "تم حذف الورقة وإلغاء تذاكرها غير المستعملة ✓");
+}
+
+export async function updateTicketNoteAction(fd: FormData) {
+  await run(fd, async ({ db, actor, f }) => { await updateTicketNote(db, f.str("ticketId", true), f.opt("note"), actor); }, "تم حفظ الملاحظة ✓");
 }
 
 export async function repaymentAction(fd: FormData) {

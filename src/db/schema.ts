@@ -202,6 +202,7 @@ export const ticketSheets = pgTable("ticket_sheets", {
   issuedAt: ts("issued_at").notNull(),
   issuedBy: text("issued_by"),
   note: text("note"),
+  deletedAt: ts("deleted_at"), // deleted sheet: its unused tickets are voided, used ones keep their history
 });
 
 export const tickets = pgTable("tickets", {

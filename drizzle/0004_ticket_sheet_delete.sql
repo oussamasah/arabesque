@@ -1,0 +1,1 @@
+ALTER TABLE "ticket_sheets" ADD COLUMN "deleted_at" timestamp with time zone;

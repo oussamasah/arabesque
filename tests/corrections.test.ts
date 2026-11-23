@@ -6,7 +6,7 @@ import { createDevice, createTestDb, FakeTablet, seedCoffee } from "./helpers";
 import { processPush } from "@/server/sync";
 import { priceAt, listProducts } from "@/server/catalog";
 import { costAt, recordCount, recordExplainedLoss, recordPurchase, theoreticalAt } from "@/server/stock";
-import { createCustomer, issueSheet, sheetForPrint } from "@/server/tickets";
+import { createCustomer, deleteSheet, issueSheet, sheetForPrint, updateSheet, updateTicketNote, validTicketHashes } from "@/server/tickets";
 import { createExpense, expectedCash, profitSummary, recordCashCount, shiftRows } from "@/server/finance";
 import {
   cancelCashCount, cancelMovement, cancelStockCount, deleteCustomer, deleteProduct, deleteStockItem, editOrderItems,
@@ -149,5 +149,28 @@ describe("owner corrections keep history", () => {
     await deleteCustomer(db, cust.id, "owner");
     const open = await db.select().from(S.tickets).where(and(eq(S.tickets.customerId, cust.id), eq(S.tickets.status, "issued")));
     expect(open).toHaveLength(0);
+  });
+
+  it("edits a sheet (unused tickets follow, used keep) and deletes it (unused voided, used kept, tablets stop accepting)", async () => {
+    const c = await createCustomer(db, { name: "Ali" }, "t");
+    const s = await issueSheet(db, { customerId: c.id, type: "credit", count: 3 }, "t");
+    const toks = (await sheetForPrint(db, s.id)).tickets.map((t) => t.token!);
+    await push(tab.event([{ product_id: seed.pCoffee.id, qty: 1 }], { at: at(10, 9), payment: "ticket", tokenHash: sha256Hex(toks[0]) }));
+
+    await updateSheet(db, s.id, { note: "ورقة نوفمبر", type: "free", maxAmountMillimes: 5000 }, "owner");
+    const rows = await db.select().from(S.tickets).where(eq(S.tickets.sheetId, s.id));
+    expect(rows.filter((t) => t.status === "issued").every((t) => t.type === "free" && t.maxAmountMillimes === 5000)).toBe(true);
+    expect(rows.find((t) => t.status === "used")!.type).toBe("credit"); // history untouched
+
+    await updateTicketNote(db, rows[0].id, "ملاحظة", "owner");
+
+    expect((await validTicketHashes(db)).token_hashes).toHaveLength(2);
+    expect(await deleteSheet(db, s.id, "owner")).toBe(2);
+    expect((await validTicketHashes(db)).token_hashes).toHaveLength(0);
+    const after = await db.select().from(S.tickets).where(eq(S.tickets.sheetId, s.id));
+    expect(after.filter((t) => t.status === "void")).toHaveLength(2);
+    expect(after.filter((t) => t.status === "used")).toHaveLength(1);
+    await expect(sheetForPrint(db, s.id)).rejects.toThrow();
+    await expect(deleteSheet(db, s.id, "owner")).rejects.toThrow();
   });
 });

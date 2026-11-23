@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq, isNull } from "drizzle-orm";
 import { getDb } from "@/db";
 import { creditLedger, customers, orders, ticketSheets } from "@/db/schema";
 import { customerBalance, remainingTickets } from "@/server/tickets";
@@ -22,7 +22,7 @@ export default async function CustomerPage({ params, searchParams }: { params: P
   const left = await remainingTickets(db, c.id);
   const ledger = await db.select({ l: creditLedger, label: orders.orderLabel }).from(creditLedger).leftJoin(orders, eq(orders.id, creditLedger.orderId))
     .where(eq(creditLedger.customerId, c.id)).orderBy(desc(creditLedger.ts), desc(creditLedger.id)).limit(200);
-  const sheets = await db.select().from(ticketSheets).where(eq(ticketSheets.customerId, c.id)).orderBy(desc(ticketSheets.issuedAt));
+  const sheets = await db.select().from(ticketSheets).where(and(eq(ticketSheets.customerId, c.id), isNull(ticketSheets.deletedAt))).orderBy(desc(ticketSheets.issuedAt));
   const back = `/admin/customers/${c.id}`;
   return (
     <>
@@ -85,7 +85,7 @@ export default async function CustomerPage({ params, searchParams }: { params: P
           <h2 className="h2 mb-2">أوراق التذاكر</h2>
           <ul className="text-sm space-y-1">
             {sheets.map((s) => (
-              <li key={s.id} className="flex gap-3 items-center"><span className="num">#{s.id}</span><span>{s.type === "credit" ? "كريدي" : "مجاني"}</span><span className="num">{s.ticketCount} تذكرة</span><span className="muted num">{formatTunis(s.issuedAt)}</span><Link className="underline" target="_blank" href={`/admin/print/sheet/${s.id}`}>طباعة</Link></li>
+              <li key={s.id} className="flex gap-3 items-center"><span className="num">#{s.id}</span><span>{s.type === "credit" ? "كريدي" : "مجاني"}</span><span className="num">{s.ticketCount} تذكرة</span><span className="muted num">{formatTunis(s.issuedAt)}</span><Link className="underline" target="_blank" href={`/admin/print/sheet/${s.id}`}>طباعة</Link><Link className="underline" href={`/admin/tickets/${s.id}`}>تعديل / حذف</Link></li>
             ))}
           </ul>
         </section>

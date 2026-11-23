@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { asc, desc, eq, sql } from "drizzle-orm";
+import { and, asc, desc, eq, isNull, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { customers, tickets, ticketSheets } from "@/db/schema";
 import { issueSheetAction, voidTicketAction } from "@/admin/actions/main";
@@ -16,7 +16,7 @@ export default async function TicketsPage({ searchParams }: { searchParams: SP }
     id: ticketSheets.id, customer: customers.name, customerId: customers.id, type: ticketSheets.type, count: ticketSheets.ticketCount,
     cap: ticketSheets.maxAmountMillimes, issuedAt: ticketSheets.issuedAt,
     left: sql<string>`(select count(*) from ${tickets} t where t.sheet_id = ${ticketSheets.id} and t.status = 'issued')`,
-  }).from(ticketSheets).innerJoin(customers, eq(customers.id, ticketSheets.customerId)).orderBy(desc(ticketSheets.issuedAt)).limit(100);
+  }).from(ticketSheets).innerJoin(customers, eq(customers.id, ticketSheets.customerId)).where(isNull(ticketSheets.deletedAt)).orderBy(desc(ticketSheets.issuedAt)).limit(100);
   const code = one(sp.code)?.toUpperCase();
   const found = code ? await db.select().from(tickets).where(eq(tickets.shortCode, code)) : [];
   const printed = one(sp.printed);
@@ -61,7 +61,7 @@ export default async function TicketsPage({ searchParams }: { searchParams: SP }
                   <td>{s.type === "credit" ? <span className="badge badge-blue">كريدي</span> : <span className="badge badge-gray">مجاني</span>}</td>
                   <td className="num">{s.count}</td><td className="num">{Number(s.left) <= 5 ? <span className="badge badge-yellow">{s.left}</span> : s.left}</td>
                   <td>{s.cap ? <Money m={s.cap} /> : "—"}</td><td className="num">{formatTunis(s.issuedAt)}</td>
-                  <td><Link className="btn btn-ghost btn-sm" href={`/admin/print/sheet/${s.id}`} target="_blank">طباعة</Link></td>
+                  <td className="whitespace-nowrap"><Link className="btn btn-ghost btn-sm" href={`/admin/print/sheet/${s.id}`} target="_blank">طباعة</Link> <Link className="btn btn-ghost btn-sm" href={`/admin/tickets/${s.id}`}>تعديل / حذف</Link></td>
                 </tr>
               ))}
             </tbody>
