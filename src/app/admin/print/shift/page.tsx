@@ -6,7 +6,7 @@ import { getSettings } from "@/server/settings";
 import { formatQty, type StockKind } from "@/lib/units";
 import { requireAdmin } from "@/server/auth";
 import { formatDT } from "@/lib/money";
-import { formatTunis, shiftEnd, SHIFT_AR } from "@/lib/time";
+import { formatTunis, shiftEnd, shiftStart, SHIFT_AR } from "@/lib/time";
 import { PrintButton } from "../sheet/[id]/PrintButton";
 
 export const dynamic = "force-dynamic";
@@ -34,8 +34,9 @@ export default async function PrintShift({ searchParams }: { searchParams: Promi
   }
   const st = await getSettings(db);
   const end = new Date(Math.min(shiftEnd(day, shift, st.morning_start_hour, st.evening_start_hour).getTime(), Date.now()));
+  const begin = shiftStart(day, shift, st.morning_start_hour, st.evening_start_hour);
   const stockRows = await db.select().from(stockItems).where(eq(stockItems.active, true)).orderBy(stockItems.nameAr);
-  const remaining = await Promise.all(stockRows.map(async (it) => ({ it, qty: await theoreticalAt(db, it.id, end) })));
+  const remaining = await Promise.all(stockRows.map(async (it) => ({ it, qty: await theoreticalAt(db, it.id, end), init: await theoreticalAt(db, it.id, begin) })));
   const total = rows.reduce((a, o) => a + o.totalMillimes, 0);
   const cash = rows.filter((o) => o.paymentType === "cash").reduce((a, o) => a + o.totalMillimes, 0);
   const tk = rows.filter((o) => o.paymentType === "ticket");
@@ -56,9 +57,9 @@ export default async function PrintShift({ searchParams }: { searchParams: Promi
       <table className="pt"><thead><tr><th>المنتج</th><th>الكمية</th><th>القيمة</th></tr></thead><tbody>
         {[...perProduct].sort((a, b) => b[1].qty - a[1].qty).map(([n, p]) => <tr key={n}><td>{n}</td><td>{p.qty}</td><td>{formatDT(p.value)}</td></tr>)}
       </tbody></table>
-      <h2 className="font-bold mt-3 mb-1">المخزون المتبقي بعد الشيفت (حسب النظام)</h2>
-      <table className="pt"><thead><tr><th>الصنف</th><th>المتبقي</th></tr></thead><tbody>
-        {remaining.map(({ it, qty }) => <tr key={it.id}><td>{it.nameAr}</td><td dir="ltr" style={{ textAlign: "right" }}>{formatQty(it.kind as StockKind, qty)}</td></tr>)}
+      <h2 className="font-bold mt-3 mb-1">المخزون: بداية الشيفت ونهايته (حسب النظام)</h2>
+      <table className="pt"><thead><tr><th>الصنف</th><th>المخزون في البداية</th><th>المتبقي في النهاية</th></tr></thead><tbody>
+        {remaining.map(({ it, qty, init }) => <tr key={it.id}><td>{it.nameAr}</td><td dir="ltr" style={{ textAlign: "right" }}>{formatQty(it.kind as StockKind, init)}</td><td dir="ltr" style={{ textAlign: "right" }}>{formatQty(it.kind as StockKind, qty)}</td></tr>)}
       </tbody></table>
       <h2 className="font-bold mt-3 mb-1" style={{ breakBefore: "page" }}>الطلبات</h2>
       <table className="pt"><thead><tr><th>الوقت</th><th>الطلب</th><th>المحتوى</th><th>الدفع</th><th>المجموع</th></tr></thead><tbody>
