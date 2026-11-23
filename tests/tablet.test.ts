@@ -24,18 +24,18 @@ describe("tablet hashing", () => {
   });
 });
 
-describe("10. blind worker app: no prices/totals in the tablet code", () => {
+describe("10. worker app: no costs/stock/admin money code in the tablet (prices only from config, Owner setting)", () => {
   const files = ["src/pos/PosApp.tsx", "src/pos/store.ts", "src/pos/sync.ts", "src/pos/Scanner.tsx", "src/pos/CacheAssets.tsx", "src/app/pos/page.tsx"];
-  it.each(files)("%s contains no money fields", (f) => {
+  it.each(files)("%s contains no cost or stock fields", (f) => {
     const src = fs.readFileSync(path.join(process.cwd(), f), "utf8")
       .replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, ""); // code only, not comments
-    expect(src).not.toMatch(/price|millime|formatDT|total_|cost|stock_qty|qty_base/i);
+    expect(src).not.toMatch(/formatDT|total_|cost|stock_qty|qty_base|unitPrice|priceMillimes/i);
   });
   it("the built /pos client bundle does not contain admin/money code (if built)", () => {
     const dir = path.join(process.cwd(), ".next", "static", "chunks", "app", "pos");
     if (!fs.existsSync(dir)) return;
     const all = fs.readdirSync(dir, { recursive: true }).map(String).filter((f) => f.endsWith(".js"))
       .map((f) => fs.readFileSync(path.join(dir, f), "utf8")).join("\n");
-    expect(all).not.toMatch(/priceMillimes|price_millimes|unitPrice|formatDT/);
+    expect(all).not.toMatch(/priceMillimes|unitPrice|formatDT|costPerBase/);
   });
 });

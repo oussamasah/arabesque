@@ -34,6 +34,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: SP 
           <N name="morning_start_hour" label="بداية الصباحية (ساعة)" value={s.morning_start_hour} />
           <N name="evening_start_hour" label="بداية المسائية (ساعة)" value={s.evening_start_hour} />
           <label className="block"><span className="lbl">ساعات الذروة (تنبيه إن لم يُسجَّل أي طلب) مثال: 9,10,17,18</span><input className="inp" name="busy_hours" defaultValue={s.busy_hours.join(",")} dir="ltr" /></label>
+          <label className="flex gap-2 items-center"><input type="checkbox" name="tablet_show_prices" defaultChecked={s.tablet_show_prices} /> إظهار الأسعار والمجموع على التابلت</label>
           <h2 className="h2 pt-2">المخزون والتذاكر</h2>
           <N name="reorder_days_ahead" label="تنبيه الشراء قبل النفاد بـ (أيام)" value={s.reorder_days_ahead} />
           <N name="consumption_window_days" label="فترة حساب متوسط الاستهلاك (أيام)" value={s.consumption_window_days} />

@@ -23,6 +23,8 @@ export interface Settings {
   reorder_days_ahead: number;
   device_silent_hours: number;
   unpaid_alert_hours: number;
+  /** show prices and totals on the worker tablet (Owner choice; the original spec kept the tablet "blind") */
+  tablet_show_prices: boolean;
   busy_hours: number[];
   margin_critical_pct: number;
   margin_warn_pct: number;
@@ -51,6 +53,7 @@ export const DEFAULT_SETTINGS: Settings = {
   reorder_days_ahead: 3,
   device_silent_hours: 6,
   unpaid_alert_hours: 3,
+  tablet_show_prices: true,
   busy_hours: [],
   margin_critical_pct: 100,
   margin_warn_pct: 90,

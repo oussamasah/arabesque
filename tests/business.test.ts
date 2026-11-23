@@ -159,11 +159,20 @@ describe("5. sync", () => {
     expect(ev[0].status).toBe("rejected");
   });
 
-  it("10. device config never contains prices", async () => {
+  it("10. device config has no prices when tablet_show_prices is off (blind mode)", async () => {
+    await setSetting(db, "tablet_show_prices", false);
     const cfg = await buildDeviceConfig(db, dev);
     const text = JSON.stringify(cfg);
-    expect(text).not.toMatch(/price|millime|total|cost|qty_base|stock/i);
+    expect(text).not.toMatch(/price_millimes|millime|total|cost|qty_base|stock/i);
     expect(cfg.products.length).toBe(2);
+    await setSetting(db, "tablet_show_prices", true);
+  });
+
+  it("10b. device config carries current prices when tablet_show_prices is on (default)", async () => {
+    const cfg = await buildDeviceConfig(db, dev);
+    expect(cfg.show_prices).toBe(true);
+    expect(cfg.products.every((p) => "price_millimes" in p && typeof (p as { price_millimes: number }).price_millimes === "number")).toBe(true);
+    expect(JSON.stringify(cfg)).not.toMatch(/cost|qty_base|stock/i);
   });
 });
 

@@ -116,7 +116,7 @@ describe("owner corrections keep history", () => {
     const cfg = await buildDeviceConfig(db, dev, NOW);
     expect(cfg.open_orders).toEqual([r.id]);
     expect(cfg.open_order_details[0]).toMatchObject({ id: r.id, table_ref: "T5", items: [{ product_id: seed.pCoffee.id, qty: 3 }] });
-    expect(JSON.stringify(cfg)).not.toMatch(/price|millime|total|cost/i);
+    expect(JSON.stringify(cfg)).not.toMatch(/total|cost/i);
     // the tablet pays it with a normal pay event
     await push(tab.pay(r.id, { at: at(20, 10) }));
     const [paid] = await db.select().from(S.orders).where(eq(S.orders.id, r.id));

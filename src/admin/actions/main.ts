@@ -315,6 +315,7 @@ export async function settingsAction(fd: FormData) {
     after.clock_skew_threshold_ms = f.int("clock_skew_threshold_s", before.clock_skew_threshold_ms / 1000) * 1000;
     after.variance_value_critical_millimes = f.money("variance_value_critical");
     after.busy_hours = f.str("busy_hours").split(/[,\s]+/).filter(Boolean).map(Number).filter((h) => Number.isInteger(h) && h >= 0 && h <= 23);
+    after.tablet_show_prices = f.bool("tablet_show_prices");
     after.telegram_chat_id = f.str("telegram_chat_id");
     after.report_email = f.str("report_email");
     const rw = { ...before.risk_weights };

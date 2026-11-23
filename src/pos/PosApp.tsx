@@ -1,17 +1,33 @@
 "use client";
 /**
- * Worker tablet app — "blind" POS (spec §10).
- * Never shows prices, totals, stock, ticket owner/value/type or reports. Prices are not even stored here.
+ * Worker tablet app (spec §10). Prices and totals are shown only when the Owner enabled "tablet_show_prices"
+ * (otherwise the tablet is "blind": prices are not even stored here). Never shows stock, ticket owner/value/type or reports.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { appendEvent, getMeta, isTicketUsedLocally, listUnpaid, loadConfig, pendingCount, type DeviceConfig, type UnpaidOrder } from "./store";
+import { appendEvent, getMeta, isTicketUsedLocally, listShiftActivity, listUnpaid, loadConfig, pendingCount, type DeviceConfig, type ShiftOrder, type ShiftPayment, type UnpaidOrder } from "./store";
 import { checkTicketOnline, heartbeat, pair, pullConfig, pushPending, Unauthorized } from "./sync";
 import { Scanner } from "./Scanner";
 import { extractTicketToken, normaliseShortCode } from "@/lib/canonical";
 import { sha256Hex } from "@/lib/sha256";
 
 type Cart = Record<number, number>;
-type Step = "cart" | "confirm" | "ticket" | "unpaid" | "pay";
+type Step = "cart" | "confirm" | "ticket" | "unpaid" | "pay" | "shift";
+type Items = { product_id: number; qty: number }[];
+
+/** 1700 → "1.700" */
+const dt = (m: number) => `${Math.floor(m / 1000)}.${String(Math.round(m) % 1000).padStart(3, "0")}`;
+
+/** Start of the current shift (tablet local time = Tunis) and its name. */
+function currentShift(settings: DeviceConfig["settings"], nowMs = Date.now()) {
+  const now = new Date(nowMs);
+  const { morning_start_hour: m, evening_start_hour: e } = settings;
+  const start = new Date(now);
+  const morning = now.getHours() >= m && now.getHours() < e;
+  if (morning) start.setHours(m, 0, 0, 0);
+  else { start.setHours(e, 0, 0, 0); if (now.getHours() < m) start.setDate(start.getDate() - 1); }
+  return { start: start.getTime(), name: morning ? "الصباحية" : "المسائية" };
+}
+const hhmm = (t: number) => new Date(t).toLocaleTimeString("fr-TN", { hour: "2-digit", minute: "2-digit", hour12: false });
 type TicketState = { status: "idle" | "checking" | "valid" | "invalid"; tokenHash?: string; codeHash?: string };
 
 const MAX_QTY = 99;
@@ -39,6 +55,7 @@ export default function PosApp() {
   const [codeInput, setCodeInput] = useState("");
   const [deviceName, setDeviceName] = useState("");
   const [unauthorized, setUnauthorized] = useState(false);
+  const [shiftData, setShiftData] = useState<{ orders: ShiftOrder[]; payments: ShiftPayment[]; start: number; name: string } | null>(null);
   const backoff = useRef(5000);
   const syncing = useRef(false);
 
@@ -136,6 +153,19 @@ export default function PosApp() {
   }, [config]);
   useEffect(() => { if (paired) void refreshUnpaid(); }, [paired, refreshUnpaid]);
 
+  // orders of the current shift: recomputed from the local log, so a new shift starts from zero automatically
+  const refreshShift = useCallback(async () => {
+    if (!config) return;
+    const sh = currentShift(config.settings);
+    try { setShiftData({ ...(await listShiftActivity(sh.start, config.void_orders, config.open_order_details)), ...sh }); } catch { /* ignore */ }
+  }, [config]);
+  useEffect(() => {
+    if (step !== "shift") return;
+    void refreshShift();
+    const t = setInterval(refreshShift, 30_000);
+    return () => clearInterval(t);
+  }, [step, refreshShift]);
+
   // ---------------------------------------------------------------- catalogue
   const products = useMemo(() => (config?.products ?? []).slice().sort((a, b) => a.sort_order - b.sort_order || a.id - b.id), [config]);
   // products in the "إضافات" (add-ons) category, e.g. the take-away cup, appear in every category tab, at the end
@@ -144,12 +174,16 @@ export default function PosApp() {
     if (category === "__all") return products;
     return [...products.filter((p) => p.category === category), ...products.filter((p) => p.category === ADDONS)];
   }, [products, category]);
+  const showPrices = !!config?.show_prices;
+  const priceOf = useCallback((id: number) => config?.products.find((p) => p.id === id)?.price_millimes ?? 0, [config]);
+  const totalOf = useCallback((items: Items) => items.reduce((a, it) => a + priceOf(it.product_id) * it.qty, 0), [priceOf]);
   const pages = Math.max(1, Math.ceil(visible.length / perPage));
   const pageItems = visible.slice(page * perPage, page * perPage + perPage);
   useEffect(() => { if (page >= pages) setPage(0); }, [pages, page]);
 
   const itemCount = Object.values(cart).reduce((a, b) => a + b, 0);
   const lines = Object.entries(cart).filter(([, q]) => q > 0).map(([id, q]) => ({ product: products.find((p) => p.id === Number(id)), qty: q }));
+  const cartTotal = lines.reduce((a, l) => a + (l.product?.price_millimes ?? 0) * l.qty, 0);
 
   const add = (id: number) => setCart((c) => {
     if (!c[id] && Object.keys(c).length >= MAX_LINES) return c;
@@ -267,6 +301,8 @@ export default function PosApp() {
               في الانتظار: {pending} ⟳
             </button>
           )}
+          <button onClick={() => { setStep("shift"); pullConfig().then(setConfig).catch(() => {}); }} data-testid="shift-btn"
+            className="rounded-full px-4 py-2 font-bold bg-white/20">طلبات الشيفت</button>
           <button onClick={() => { void refreshUnpaid(); setStep("unpaid"); pullConfig().then(setConfig).catch(() => {}); }} data-testid="unpaid-btn"
             className={`rounded-full px-4 py-2 font-bold ${unpaid.length ? "bg-yellow-300 text-black" : "bg-white/20"}`}>
             غير مدفوعة: {unpaid.length}
@@ -299,6 +335,9 @@ export default function PosApp() {
                     <img src={p.image} alt="" draggable={false} className="w-20 h-20 rounded-2xl bg-white/95 p-1 pointer-events-none" />
                   )}
                   <span className="text-2xl font-bold leading-tight drop-shadow">{p.name_ar}</span>
+                  {showPrices && p.price_millimes != null && (
+                    <span className="mt-1 rounded-full bg-white text-black px-3 py-0.5 text-2xl font-black shadow" dir="ltr">{dt(p.price_millimes)} د</span>
+                  )}
                 </button>
                 {q > 0 && (
                   <>
@@ -321,11 +360,12 @@ export default function PosApp() {
         </div>
       )}
 
-      {/* bottom bar: item count only, never an amount */}
+      {/* bottom bar: item count (and the total when prices are shown) */}
       <footer className="flex gap-3 p-3 bg-white border-t">
         <button className="pos-btn bg-gray-200 text-gray-800 flex-1" onClick={clear} disabled={!itemCount}>مسح الكل</button>
         <button className="pos-btn bg-[var(--brand)] text-white flex-[2]" disabled={!itemCount} onClick={() => setStep("confirm")}>
           تأكيد الطلب {itemCount > 0 && <span className="opacity-80">· {itemCount} عناصر</span>}
+          {itemCount > 0 && showPrices && <span className="mr-3 bg-white text-black rounded-xl px-3" dir="ltr">{dt(cartTotal)} د</span>}
         </button>
       </footer>
 
@@ -335,9 +375,11 @@ export default function PosApp() {
           <h2 className="text-3xl font-bold mb-4">تأكيد الطلب</h2>
           <ul className="text-2xl space-y-2 max-h-[40vh] overflow-auto mb-4">
             {lines.map((l) => (
-              <li key={l.product?.id} className="flex justify-between border-b pb-2"><span>{l.product?.name_ar ?? "?"}</span><span className="font-black">× {l.qty}</span></li>
+              <li key={l.product?.id} className="flex justify-between border-b pb-2"><span>{l.product?.name_ar ?? "?"}</span>
+                <span className="font-black">× {l.qty}{showPrices && <span className="font-bold text-gray-600 mr-4" dir="ltr">{dt((l.product?.price_millimes ?? 0) * l.qty)}</span>}</span></li>
             ))}
           </ul>
+          {showPrices && <p className="flex justify-between text-3xl font-black mb-4"><span>المجموع</span><span dir="ltr">{dt(cartTotal)} د</span></p>}
           <p className="bg-amber-100 text-amber-900 rounded-xl p-3 text-xl font-bold mb-4">⚠️ تأكد من الطلب — لا يمكن إلغاؤه بعد التأكيد</p>
           <input value={tableRef} onChange={(e) => setTableRef(e.target.value)} maxLength={20} autoComplete="off"
             placeholder="الطاولة / اسم الزبون (اختياري)" className="w-full text-2xl border-2 rounded-xl p-3 mb-3" />
@@ -384,12 +426,8 @@ export default function PosApp() {
 
       {/* unpaid orders: served, waiting for payment (no amounts shown) */}
       {step === "unpaid" && (() => {
-        // start of the current shift (tablet local time = Tunis): older orders belong to a previous shift → owed by its worker
-        const now = new Date();
-        const { morning_start_hour: m, evening_start_hour: e } = config.settings;
-        const start = new Date(now);
-        if (now.getHours() >= m && now.getHours() < e) start.setHours(m, 0, 0, 0);
-        else { start.setHours(e, 0, 0, 0); if (now.getHours() < m) start.setDate(start.getDate() - 1); }
+        // start of the current shift: older orders belong to a previous shift → owed by its worker
+        const start = new Date(currentShift(config.settings).start);
         const q = unpaidQuery.trim();
         const list = unpaid.filter((o) => !q || (o.table_ref ?? "").includes(q) || (o.label ?? labelOf(o.seq)).includes(q));
         const old = unpaid.filter((o) => o.created_at < start.getTime()).length;
@@ -416,6 +454,7 @@ export default function PosApp() {
                         </div>
                         {prev && <span className="self-start bg-red-100 text-red-700 rounded-full px-3 text-base font-bold">شيفت سابق — على العامل</span>}
                         <div className="text-lg leading-snug">{o.items.map((it) => `${products.find((p) => p.id === it.product_id)?.name_ar ?? "?"} × ${it.qty}`).join("، ")}</div>
+                        {showPrices && <span className="text-2xl font-black" dir="ltr">{dt(totalOf(o.items))} د</span>}
                         <span className="mt-auto pt-2 text-center bg-green-600 text-white rounded-xl py-2 text-2xl font-black">دفع</span>
                       </button>
                     );
@@ -435,12 +474,18 @@ export default function PosApp() {
               <li key={it.product_id} className="flex justify-between border-b pb-1"><span>{products.find((p) => p.id === it.product_id)?.name_ar ?? "?"}</span><span className="font-black">× {it.qty}</span></li>
             ))}
           </ul>
+          {showPrices && <p className="flex justify-between text-3xl font-black mb-4"><span>المجموع</span><span dir="ltr">{dt(totalOf(payTarget.items))} د</span></p>}
           <div className="grid grid-cols-2 gap-3">
             <button className="pos-btn bg-green-600 text-white" disabled={busy} onClick={() => pay("cash")}>كاش</button>
             <button className="pos-btn bg-indigo-600 text-white" disabled={busy} onClick={() => { setTicket({ status: "idle" }); setCodeInput(""); setStep("ticket"); }}>تذكرة</button>
           </div>
           <button className="pos-btn bg-gray-200 text-gray-800 w-full mt-3" onClick={() => { setPayTarget(null); setStep("unpaid"); }}>رجوع للقائمة</button>
         </Modal>
+      )}
+
+      {step === "shift" && (
+        <ShiftScreen data={shiftData} unpaidIds={new Set(unpaid.map((u) => u.id))} showPrices={showPrices} totalOf={totalOf}
+          nameOf={(id) => products.find((p) => p.id === id)?.name_ar ?? "?"} labelOf={labelOf} onClose={() => setStep("cart")} />
       )}
 
       {success && (
@@ -484,6 +529,91 @@ function PairScreen({ onPaired, revoked }: { onPaired: () => void; revoked: bool
         ))}
       </div>
       {err && <p className="text-2xl text-red-600">{err}</p>}
+    </div>
+  );
+}
+
+const PAY_AR = { cash: "كاش", ticket: "تذكرة" } as const;
+
+function SumCard({ label, value, cls = "" }: { label: string; value: string; cls?: string }) {
+  return (
+    <div className={`rounded-2xl bg-white p-3 text-center shadow-sm ${cls}`}>
+      <div className="text-lg text-gray-600">{label}</div>
+      <div className="text-3xl font-black" dir="ltr">{value}</div>
+    </div>
+  );
+}
+
+/** All orders of the current shift on this tablet, with totals. Starts from zero at each new shift. */
+function ShiftScreen({ data, unpaidIds, showPrices, totalOf, nameOf, labelOf, onClose }: {
+  data: { orders: ShiftOrder[]; payments: ShiftPayment[]; start: number; name: string } | null;
+  unpaidIds: Set<string>; showPrices: boolean; totalOf: (items: Items) => number;
+  nameOf: (id: number) => string; labelOf: (seq: number) => string; onClose: () => void;
+}) {
+  const orders = data?.orders ?? [];
+  const payments = data?.payments ?? [];
+  let total = 0, cash = 0, tickets = 0, unpaidCount = 0, unpaidSum = 0;
+  for (const o of orders) {
+    const t = totalOf(o.items);
+    total += t;
+    if (o.payment === "cash") cash += t;
+    else if (o.payment === "ticket") tickets++;
+    else if (o.paid) { if (o.paid.payment === "cash") cash += t; else tickets++; }
+    else if (unpaidIds.has(o.id)) { unpaidCount++; unpaidSum += t; }
+  }
+  for (const p of payments) { if (p.payment === "cash") cash += totalOf(p.items); else tickets++; }
+  const status = (o: ShiftOrder) => {
+    if (o.payment !== "later") return { text: PAY_AR[o.payment], cls: o.payment === "cash" ? "bg-green-100 text-green-800" : "bg-indigo-100 text-indigo-800" };
+    if (o.paid) return { text: `لاحقاً ← ${PAY_AR[o.paid.payment]} ${hhmm(o.paid.at)}`, cls: "bg-green-100 text-green-800" };
+    if (unpaidIds.has(o.id)) return { text: "غير مدفوع", cls: "bg-yellow-200 text-yellow-900" };
+    return { text: "سُوّي من الإدارة", cls: "bg-gray-100 text-gray-700" };
+  };
+  const itemsText = (items: Items) => items.map((it) => `${nameOf(it.product_id)} × ${it.qty}`).join("، ");
+  return (
+    <div className="fixed inset-0 z-40 bg-[var(--paper)] flex flex-col" data-testid="shift-screen">
+      <div className="flex flex-wrap items-center gap-3 px-4 py-3 bg-[var(--brand)] text-white">
+        <h2 className="text-3xl font-bold">طلبات الشيفت {data?.name ?? ""}</h2>
+        {data && <span className="text-xl opacity-80">منذ <span dir="ltr">{hhmm(data.start)}</span></span>}
+        <button className="pos-btn bg-white text-[var(--brand)] px-8 mr-auto" onClick={onClose}>رجوع</button>
+      </div>
+      <div className="grid gap-3 p-3" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))" }}>
+        <SumCard label="عدد الطلبات" value={String(orders.length)} />
+        {showPrices && <SumCard label="مجموع الطلبات" value={`${dt(total)} د`} />}
+        {showPrices && <SumCard label="كاش مقبوض" value={`${dt(cash)} د`} cls="border-4 border-green-500" />}
+        <SumCard label="تذاكر" value={String(tickets)} />
+        <SumCard label="غير مدفوع" value={showPrices ? `${unpaidCount} · ${dt(unpaidSum)} د` : String(unpaidCount)} cls={unpaidCount ? "border-4 border-yellow-400" : ""} />
+      </div>
+      <div className="flex-1 overflow-y-auto px-3 pb-3">
+        {!data ? <p className="text-3xl text-center py-16">…</p> : orders.length === 0 && payments.length === 0 ? (
+          <p className="text-3xl text-gray-500 text-center py-16">لا توجد طلبات في هذا الشيفت بعد</p>
+        ) : (
+          <table className="w-full bg-white rounded-2xl overflow-hidden text-xl">
+            <tbody>
+              {orders.map((o) => {
+                const st = status(o);
+                return (
+                  <tr key={o.id} className="border-b align-top">
+                    <td className="p-2 text-gray-500 whitespace-nowrap" dir="ltr">{hhmm(o.created_at)}</td>
+                    <td className="p-2 font-bold whitespace-nowrap">{o.table_ref || labelOf(o.seq)}</td>
+                    <td className="p-2">{itemsText(o.items)}</td>
+                    <td className="p-2 whitespace-nowrap"><span className={`rounded-full px-3 py-0.5 text-lg font-bold ${st.cls}`}>{st.text}</span></td>
+                    {showPrices && <td className="p-2 font-black whitespace-nowrap" dir="ltr">{dt(totalOf(o.items))}</td>}
+                  </tr>
+                );
+              })}
+              {payments.map((p) => (
+                <tr key={`pay-${p.order_id}`} className="border-b align-top bg-green-50">
+                  <td className="p-2 text-gray-500 whitespace-nowrap" dir="ltr">{hhmm(p.at)}</td>
+                  <td className="p-2 font-bold whitespace-nowrap">{p.label}</td>
+                  <td className="p-2">دفع طلب من شيفت سابق: {itemsText(p.items)}</td>
+                  <td className="p-2 whitespace-nowrap"><span className="rounded-full px-3 py-0.5 text-lg font-bold bg-green-100 text-green-800">{PAY_AR[p.payment]}</span></td>
+                  {showPrices && <td className="p-2 font-black whitespace-nowrap" dir="ltr">{dt(totalOf(p.items))}</td>}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
     </div>
   );
 }

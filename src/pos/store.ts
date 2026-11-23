@@ -1,7 +1,7 @@
 "use client";
 /**
  * Tablet local storage (IndexedDB) — spec §8.1.
- * Stores: meta (device identity, next seq, last hash, clock offset), config (catalogue WITHOUT prices),
+ * Stores: meta (device identity, next seq, last hash, clock offset), config (catalogue; prices only if the Owner enabled them),
  * events (append-only outbox + permanent local log), used_tickets (locally consumed ticket hashes).
  */
 import { openDB, type DBSchema, type IDBPDatabase } from "idb";
@@ -11,7 +11,11 @@ import { sha256Hex, uuidv4 } from "@/lib/sha256";
 export interface DeviceConfig {
   business_name: string;
   device_name: string;
-  products: { id: number; name_ar: string; name_fr: string | null; category: string | null; color: string | null; image?: string | null; sort_order: number }[];
+  products: { id: number; name_ar: string; name_fr: string | null; category: string | null; color: string | null; image?: string | null; sort_order: number; price_millimes?: number | null }[];
+  /** Owner setting: show prices and totals on the tablet */
+  show_prices?: boolean;
+  /** this device's orders deleted by the Owner (hidden from the shift list) */
+  void_orders?: string[];
   settings: { morning_start_hour: number; evening_start_hour: number };
   valid_tickets: { token_hashes: string[]; code_hashes: string[] };
   /** pay-later orders of this device still open on the server */
@@ -204,4 +208,56 @@ export async function listUnpaid(serverOpen?: string[], serverDetails?: DeviceCo
     .filter((d) => !known.has(d.id) && !paid.has(d.id))
     .map((d) => ({ id: d.id, seq: 0, created_at: d.ts, items: d.items, table_ref: d.table_ref ?? undefined, label: d.label }));
   return [...local, ...remote].sort((a, b) => a.created_at - b.created_at);
+}
+
+export interface ShiftOrder {
+  id: string;
+  seq: number;
+  created_at: number;
+  items: { product_id: number; qty: number }[];
+  table_ref?: string;
+  payment: "cash" | "ticket" | "later";
+  /** for "later": how it was settled (locally on this tablet, in this shift or after) */
+  paid?: { payment: "cash" | "ticket"; at: number };
+}
+
+export interface ShiftPayment { order_id: string; payment: "cash" | "ticket"; at: number; items: { product_id: number; qty: number }[]; label: string }
+
+/**
+ * Orders recorded on this tablet since `since` (start of the current shift) and payments taken in this shift
+ * for orders of a previous shift. Orders deleted by the Owner and rejected events are left out.
+ */
+export async function listShiftActivity(since: number, voided: string[] = [], details: DeviceConfig["open_order_details"] = []) {
+  const db = await posDb();
+  const deviceId = await db.get("meta", "device_id");
+  const all = (await db.getAll("events")).filter((e) => e.envelope.device_id === deviceId && e.status !== "rejected");
+  const gone = new Set(voided);
+  const creates = new Map(all.filter((e) => e.envelope.type === "order.create").map((e) => [e.client_event_id, e]));
+  const pays = all.filter((e) => e.envelope.type === "order.pay");
+  const payOf = new Map(pays.map((e) => [(e.envelope.payload as OrderPayPayload).order_id, e]));
+  const orders: ShiftOrder[] = [...creates.values()]
+    .filter((e) => e.created_at >= since && !gone.has(e.client_event_id))
+    .sort((a, b) => b.seq - a.seq)
+    .map((e) => {
+      const p = e.envelope.payload as OrderCreatePayload;
+      const pe = payOf.get(e.client_event_id);
+      return {
+        id: e.client_event_id, seq: e.seq, created_at: e.created_at, items: p.items, table_ref: p.table_ref, payment: p.payment,
+        ...(pe ? { paid: { payment: (pe.envelope.payload as OrderPayPayload).payment, at: pe.created_at } } : {}),
+      } as ShiftOrder;
+    });
+  const payments: ShiftPayment[] = pays
+    .filter((e) => e.created_at >= since)
+    .map((e) => {
+      const pp = e.envelope.payload as OrderPayPayload;
+      const c = creates.get(pp.order_id);
+      if (c && c.created_at >= since) return null; // already counted with the order of this shift
+      const d = details?.find((x) => x.id === pp.order_id);
+      const items = c ? (c.envelope.payload as OrderCreatePayload).items : d?.items ?? [];
+      const label = c ? ((c.envelope.payload as OrderCreatePayload).table_ref || `#${c.seq}`) : d?.table_ref || d?.label || "طلب سابق";
+      return { order_id: pp.order_id, payment: pp.payment, at: e.created_at, items, label } as ShiftPayment;
+    })
+    .filter((x): x is ShiftPayment => !!x && !gone.has(x.order_id))
+    .sort((a, b) => b.at - a.at);
+  return { orders, payments };
 }
