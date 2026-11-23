@@ -14,6 +14,8 @@ export interface DeviceConfig {
   products: { id: number; name_ar: string; name_fr: string | null; category: string | null; color: string | null; image?: string | null; sort_order: number; price_millimes?: number | null }[];
   /** Owner setting: show prices and totals on the tablet */
   show_prices?: boolean;
+  /** server totals (millimes) of this device's recent orders — used instead of recomputing with today's prices */
+  order_totals?: Record<string, number>;
   /** this device's orders deleted by the Owner (hidden from the shift list) */
   void_orders?: string[];
   settings: { morning_start_hour: number; evening_start_hour: number };

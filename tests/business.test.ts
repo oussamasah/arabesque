@@ -174,6 +174,15 @@ describe("5. sync", () => {
     expect(cfg.products.every((p) => "price_millimes" in p && typeof (p as { price_millimes: number }).price_millimes === "number")).toBe(true);
     expect(JSON.stringify(cfg)).not.toMatch(/cost|qty_base|stock/i);
   });
+
+  it("10c. config carries the server's exact order totals (tablet shift total = admin total even after a price change)", async () => {
+    const e = tab.event([{ product_id: seed.pCoffee.id, qty: 2 }], { at: at(10, 9) });
+    await push(e);
+    const [o] = await db.select().from(S.orders);
+    await setPrice(db, seed.pCoffee.id, 9999, at(10, 10), "owner"); // price changes later
+    const cfg = await buildDeviceConfig(db, dev, at(10, 12));
+    expect(cfg.order_totals?.[e.client_event_id]).toBe(o.totalMillimes);
+  });
 });
 
 describe("6. tickets", () => {

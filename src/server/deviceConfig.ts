@@ -21,7 +21,7 @@ export async function buildDeviceConfig(db: Exec, dev: typeof devices.$inferSele
   // pay-later orders still open on the server: this device's, plus those entered/corrected by the Owner (no device).
   // Voided / settled orders disappear from the tablet's unpaid list. No amounts are sent.
   const open = await db.select({
-    id: orders.id, label: orders.orderLabel, table_ref: orders.tableRef, ts: orders.effectiveTs, deviceId: orders.deviceId,
+    id: orders.id, label: orders.orderLabel, table_ref: orders.tableRef, ts: orders.effectiveTs, deviceId: orders.deviceId, total: orders.totalMillimes,
   }).from(orders).where(and(
     or(eq(orders.deviceId, dev.id), isNull(orders.deviceId)), eq(orders.paymentType, "pending"), ne(orders.status, "void"),
     gte(orders.effectiveTs, new Date(now.getTime() - 14 * 86_400_000)),
@@ -36,11 +36,16 @@ export async function buildDeviceConfig(db: Exec, dev: typeof devices.$inferSele
   const voided = await db.select({ id: orders.id }).from(orders).where(and(
     eq(orders.deviceId, dev.id), eq(orders.status, "void"), gte(orders.effectiveTs, new Date(now.getTime() - 2 * 86_400_000)),
   ));
+  // exact server totals of this device's recent orders (so the tablet's shift totals equal the admin's, whatever prices did since)
+  const totals = withPrices ? await db.select({ id: orders.id, total: orders.totalMillimes }).from(orders).where(and(
+    eq(orders.deviceId, dev.id), ne(orders.status, "void"), gte(orders.effectiveTs, new Date(now.getTime() - 2 * 86_400_000)),
+  )) : [];
   const body = {
     business_name: s.business_name,
     device_name: dev.name,
     products: products_,
     show_prices: withPrices,
+    ...(withPrices ? { order_totals: Object.fromEntries([...totals, ...open].map((t) => [t.id, t.total])) } : {}),
     void_orders: voided.map((v) => v.id),
     settings: { morning_start_hour: s.morning_start_hour, evening_start_hour: s.evening_start_hour },
     valid_tickets: await validTicketHashes(db),
