@@ -4,11 +4,11 @@ import { alerts, customers, devices, orders } from "@/db/schema";
 import type { Exec } from "@/db";
 import { raiseAlert, resolveAlerts } from "./audit";
 import { getSettings } from "./settings";
-import { checkStockAlerts } from "./stock";
+import { checkStockAlerts, shiftStockReport } from "./stock";
 import { checkLowTickets } from "./tickets";
 import { profitSummary, shiftRows } from "./finance";
 import { formatDT } from "@/lib/money";
-import { addDays, shiftInfo, SHIFT_AR, tunisLocalToUtc, tunisParts } from "@/lib/time";
+import { addDays, shiftEnd, shiftInfo, SHIFT_AR, tunisLocalToUtc, tunisParts } from "@/lib/time";
 
 /** Periodic checks (dashboard load + cron): device silent, busy hours with no orders, stock early warnings, low tickets. */
 export async function runPeriodicChecks(db: Exec, now = new Date()) {
@@ -58,6 +58,18 @@ export async function runPeriodicChecks(db: Exec, now = new Date()) {
     await raiseAlert(db, {
       severity: "warn", type: "unpaid_shift", dedupeKey: `unpaid_shift:${e.day}:${e.shift}`, businessDay: e.day, shift: e.shift,
       message: `انتهى شيفت ${e.day} ${SHIFT_AR[e.shift as "morning"]} وبقيت ${e.n} طلبات غير مدفوعة — ${formatDT(e.v)} على عامل الشيفت`,
+    });
+  }
+
+  // shifts that ended (> 6 h ago, last 3 days) with orders but no stock count → ask for the paper count
+  const from = addDays(cur.businessDay, -3);
+  for (const r of await shiftStockReport(db, from, cur.businessDay)) {
+    const key = `missing_count:${r.businessDay}:${r.shift}`;
+    const ended = shiftEnd(r.businessDay, r.shift, s.morning_start_hour, s.evening_start_hour);
+    if (r.counted || r.orders === 0 || now.getTime() - ended.getTime() < 6 * 3_600_000) { if (r.counted) await resolveAlerts(db, key); continue; }
+    await raiseAlert(db, {
+      severity: "warn", type: "missing_stock_count", dedupeKey: key, businessDay: r.businessDay, shift: r.shift,
+      message: `لم يُسجَّل جرد المخزون لشيفت ${r.businessDay} ${SHIFT_AR[r.shift]} (${r.orders} طلب) — أدخل ورقة الجرد`,
     });
   }
 

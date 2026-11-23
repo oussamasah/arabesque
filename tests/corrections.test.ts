@@ -5,7 +5,8 @@ import type { DB } from "@/db";
 import { createDevice, createTestDb, FakeTablet, seedCoffee } from "./helpers";
 import { processPush } from "@/server/sync";
 import { priceAt, listProducts } from "@/server/catalog";
-import { costAt, recordCount, recordExplainedLoss, recordPurchase, theoreticalAt } from "@/server/stock";
+import { costAt, recordCount, recordExplainedLoss, recordPurchase, shiftStockReport, theoreticalAt } from "@/server/stock";
+import { runPeriodicChecks } from "@/server/checks";
 import { createCustomer, deleteSheet, issueSheet, sheetForPrint, updateSheet, updateTicketNote, validTicketHashes } from "@/server/tickets";
 import { createExpense, expectedCash, profitSummary, recordCashCount, shiftRows } from "@/server/finance";
 import {
@@ -172,5 +173,27 @@ describe("owner corrections keep history", () => {
     expect(after.filter((t) => t.status === "used")).toHaveLength(1);
     await expect(sheetForPrint(db, s.id)).rejects.toThrow();
     await expect(deleteSheet(db, s.id, "owner")).rejects.toThrow();
+  });
+
+  it("shows per shift which one has a stock shortage, and alerts when a finished shift has no count", async () => {
+    // morning: 2 waters sold; evening: 1 sold. Water seeded with 48 (see seedCoffee).
+    await push(tab.event([{ product_id: seed.pWater.id, qty: 2 }], { at: at(10, 9) }), tab.event([{ product_id: seed.pWater.id, qty: 1 }], { at: at(10, 17) }));
+    // count at the 15:00 handover finds 3 missing bottles (expected 46, found 43) → shortage filed under the MORNING shift
+    await recordCount(db, { ts: at(10, 15, 5), handover: "morning_to_evening", entries: [{ stockItemId: seed.water.id, countedBase: 43 }] }, "owner");
+    const rep = await shiftStockReport(db, "2026-03-10", "2026-03-10");
+    const morning = rep.find((r) => r.shift === "morning")!;
+    const evening = rep.find((r) => r.shift === "evening")!;
+    expect(morning.counted).toBe(true);
+    expect(morning.shortages).toBe(1);
+    expect(morning.lines[0]).toMatchObject({ theoretical: 46, counted: 43, variance: -3 });
+    expect(evening.counted).toBe(false);
+    expect(evening.orders).toBe(1);
+
+    // 6+ hours after the evening shift ended (06:00 next day) with no count → alert
+    await runPeriodicChecks(db, at(11, 13));
+    const al = await db.select().from(S.alerts).where(eq(S.alerts.type, "missing_stock_count"));
+    expect(al.map((a) => a.message).join()).toMatch(/2026-03-10/);
+    // the morning shift has a count → no alert for it
+    expect(al.filter((a) => a.shift === "morning")).toHaveLength(0);
   });
 });

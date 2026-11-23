@@ -47,12 +47,15 @@ export default async function StockPage({ searchParams }: { searchParams: SP }) 
         </div>
       )}
 
-      <div className="grid grid-cols-3 gap-3 mb-5">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
         <Link href="/admin/stock/purchase" className="card text-center hover:bg-[#fbf6f0] py-5">
           <div className="text-3xl">📦</div><div className="font-bold mt-1">شراء</div><div className="muted text-xs">سلعة دخلت المقهى</div>
         </Link>
         <Link href="/admin/stock/count" className="card text-center hover:bg-[#fbf6f0] py-5">
           <div className="text-3xl">📋</div><div className="font-bold mt-1">جرد</div><div className="muted text-xs">ما كتبه شخص الثقة</div>
+        </Link>
+        <Link href="/admin/stock/shifts" className="card text-center hover:bg-[#fbf6f0] py-5">
+          <div className="text-3xl">📊</div><div className="font-bold mt-1">الجرد حسب الشيفت</div><div className="muted text-xs">أي شيفت فيه نقص</div>
         </Link>
         <Link href="/admin/stock/loss" className="card text-center hover:bg-[#fbf6f0] py-5">
           <div className="text-3xl">🗑️</div><div className="font-bold mt-1">تالف / للعمال</div><div className="muted text-xs">سلعة خرجت بدون بيع</div>

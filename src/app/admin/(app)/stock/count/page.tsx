@@ -32,6 +32,7 @@ export default async function CountPage({ searchParams }: { searchParams: SP }) 
     <>
       <Flash sp={sp} />
       <PageTitle title="📋 الجرد" sub="انقل الأرقام من ورقة شخص الثقة. اكتب فقط المواد التي عُدّت.">
+        <Link href="/admin/stock/shifts" className="btn btn-ghost">📊 الجرد حسب الشيفت</Link>
         <Link href="/admin/stock" className="btn btn-ghost">← المخزون</Link>
       </PageTitle>
 

@@ -281,3 +281,44 @@ export async function checkStockAlerts(db: Exec, itemIds?: number[], now = new D
     } else await resolveAlerts(db, kRun);
   }
 }
+
+export interface ShiftStockLine { itemId: number; name: string; kind: StockKind; theoretical: number; counted: number; variance: number; value: number; marginUsedPct: number | null; countedAt: Date }
+export interface ShiftStockReport {
+  businessDay: string; shift: Shift; orders: number; counted: boolean;
+  lines: ShiftStockLine[]; shortages: number; /** lines with a negative variance */
+}
+
+/**
+ * Per shift: what the stock count found compared with what the orders say should be there.
+ * A count closes one shift (see evaluatedShiftFor), so a shortage points at the shift it is filed under.
+ * Shifts with orders but no count are listed as "not counted".
+ */
+export async function shiftStockReport(db: Exec, fromDay: string, toDay: string): Promise<ShiftStockReport[]> {
+  const counts = await db.select({ c: stockCounts, name: stockItems.nameAr, kind: stockItems.kind }).from(stockCounts)
+    .innerJoin(stockItems, eq(stockItems.id, stockCounts.stockItemId))
+    .where(and(gte(stockCounts.businessDay, fromDay), lte(stockCounts.businessDay, toDay), isNull(stockCounts.cancelledAt)))
+    .orderBy(asc(stockCounts.ts), asc(stockItems.nameAr));
+  const ord = await db.select({ day: orders.businessDay, shift: orders.shift, n: sql<string>`count(*)` }).from(orders)
+    .where(and(gte(orders.businessDay, fromDay), lte(orders.businessDay, toDay), ne(orders.status, "void")))
+    .groupBy(orders.businessDay, orders.shift);
+  const map = new Map<string, ShiftStockReport>();
+  const get = (day: string, shift: string) => {
+    const k = `${day}:${shift}`;
+    if (!map.has(k)) map.set(k, { businessDay: day, shift: shift as Shift, orders: 0, counted: false, lines: [], shortages: 0 });
+    return map.get(k)!;
+  };
+  for (const o of ord) get(o.day, o.shift).orders = Number(o.n);
+  for (const { c, name, kind } of counts) {
+    const r = get(c.businessDay, c.evaluatedShift);
+    r.counted = true;
+    // the latest count of an item in that shift wins
+    const i = r.lines.findIndex((l) => l.itemId === c.stockItemId);
+    const line: ShiftStockLine = {
+      itemId: c.stockItemId, name, kind: kind as StockKind, theoretical: c.theoreticalBase, counted: c.countedBase, variance: c.varianceBase,
+      value: Number(c.valueMillimes ?? 0), marginUsedPct: c.marginUsedPct === null ? null : Number(c.marginUsedPct), countedAt: c.ts,
+    };
+    if (i >= 0) r.lines[i] = line; else r.lines.push(line);
+  }
+  for (const r of map.values()) r.shortages = r.lines.filter((l) => l.variance < 0).length;
+  return [...map.values()].sort((a, b) => (a.businessDay === b.businessDay ? (a.shift === "morning" ? 1 : -1) : a.businessDay < b.businessDay ? 1 : -1));
+}
