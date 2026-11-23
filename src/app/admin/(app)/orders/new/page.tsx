@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { getDb } from "@/db";
-import { listProducts } from "@/server/catalog";
+import { listProducts, priceAt } from "@/server/catalog";
+import { OrderItemsPicker } from "@/admin/OrderItemsPicker";
 import { manualOrderAction } from "@/admin/actions/main";
 import { Back, Flash, PageTitle, type SP } from "@/admin/ui";
 import { toTunisLocalInput } from "@/lib/time";
@@ -9,7 +10,10 @@ export const dynamic = "force-dynamic";
 
 export default async function NewOrderPage({ searchParams }: { searchParams: SP }) {
   const sp = await searchParams;
-  const prods = await listProducts(await getDb(), true);
+  const db = await getDb();
+  const now = new Date();
+  const prods = await listProducts(db, true);
+  const picker = await Promise.all(prods.map(async (p) => ({ id: p.id, name: p.nameAr, category: p.category, price: await priceAt(db, p.id, now) })));
   return (
     <>
       <Flash sp={sp} />
@@ -18,13 +22,7 @@ export default async function NewOrderPage({ searchParams }: { searchParams: SP 
       </PageTitle>
       <form action={manualOrderAction} className="card space-y-3 max-w-3xl">
         <Back value="/admin/orders/new" />
-        <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-2">
-          {prods.map((p) => (
-            <label key={p.id} className="flex items-center justify-between gap-2 border rounded-lg p-2">
-              <span>{p.nameAr}</span><input className="inp w-20" type="number" min={0} max={99} name={`qty_${p.id}`} placeholder="0" />
-            </label>
-          ))}
-        </div>
+        <OrderItemsPicker products={picker} />
         <div className="grid md:grid-cols-3 gap-3">
           <label><span className="lbl">وقت الطلب الحقيقي</span><input className="inp" type="datetime-local" name="at" defaultValue={toTunisLocalInput(new Date())} /></label>
           <label><span className="lbl">الدفع</span><select className="inp" name="payment"><option value="cash">كاش</option><option value="ticket">تذكرة</option><option value="later">لاحقاً (غير مدفوع)</option></select></label>

@@ -3,7 +3,8 @@ import { notFound } from "next/navigation";
 import { and, eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { auditLog, devices, orderItems, orders, tickets } from "@/db/schema";
-import { listProducts } from "@/server/catalog";
+import { listProducts, priceAt } from "@/server/catalog";
+import { OrderItemsPicker } from "@/admin/OrderItemsPicker";
 import { orderLinesFor, workerFor } from "@/server/finance";
 import { adminPayAction, approveOrderAction, editOrderAction, unpaidLossAction, voidOrderAction } from "@/admin/actions/main";
 import { Back, FLAG_AR, Flash, Money, PAYMENT_AR, PageTitle, STATUS_AR, type SP } from "@/admin/ui";
@@ -26,6 +27,7 @@ export default async function OrderPage({ params, searchParams }: { params: Prom
   const back = `/admin/orders/${o.id}`;
   const qtyOf = new Map((await db.select().from(orderItems).where(eq(orderItems.orderId, o.id))).map((i) => [i.productId, i.qty]));
   const allProducts = await listProducts(db, true);
+  const picker = await Promise.all(allProducts.map(async (p) => ({ id: p.id, name: p.nameAr, category: p.category, price: await priceAt(db, p.id, o.effectiveTs) })));
   return (
     <>
       <Flash sp={sp} />
@@ -95,13 +97,7 @@ export default async function OrderPage({ params, searchParams }: { params: Prom
               <summary className="h2 cursor-pointer">تعديل المنتجات</summary>
               <form action={editOrderAction} className="space-y-2 mt-2">
                 <Back value={back} /><input type="hidden" name="orderId" value={o.id} />
-                <div className="grid grid-cols-2 gap-1 max-h-72 overflow-auto">
-                  {allProducts.map((p) => (
-                    <label key={p.id} className="flex items-center justify-between gap-1 border rounded-lg px-2 py-1 text-sm">
-                      <span>{p.nameAr}</span><input className="inp w-16 py-1" type="number" min={0} max={99} name={`qty_${p.id}`} defaultValue={qtyOf.get(p.id) ?? ""} />
-                    </label>
-                  ))}
-                </div>
+                <OrderItemsPicker products={picker} initial={Object.fromEntries(qtyOf)} />
                 <p className="muted text-xs">يُلغى هذا الطلب ويُنشأ طلب مصحَّح بنفس الوقت ونفس طريقة الدفع (الاثنان يبقيان ظاهرين).</p>
                 <button className="btn w-full">حفظ التعديل</button>
               </form>

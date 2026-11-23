@@ -1,6 +1,7 @@
 #!/bin/sh
 # Nightly PostgreSQL backup of the café database, kept 30 days. Run from cron on the VPS.
 set -eu
+umask 077
 DIR=/opt/cafe/backups
 mkdir -p "$DIR"
 cd /opt/cafe/app
