@@ -29,6 +29,11 @@ export async function saveProductAction(fd: FormData) {
     const p = await createProduct(db, { ...input, active: true }, actor);
     const price = f.optMoney("price");
     if (price !== null) await setPrice(db, p.id, price, new Date(), actor);
+    // resold item (water, soda...): create a stock item with the same name so it appears in the purchase list, 1 piece per sale
+    if (f.bool("createStock")) {
+      const it = await createStockItem(db, { nameAr: input.nameAr, kind: "piece", minQtyBase: 0 }, actor);
+      await saveRecipe(db, p.id, [{ stockItemId: it.id, qtyBase: 1, realQtyBase: 1 }], new Date(), actor);
+    }
     return `/admin/products/${p.id}`;
   });
 }

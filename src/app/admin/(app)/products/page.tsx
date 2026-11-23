@@ -60,6 +60,10 @@ export default async function ProductsPage({ searchParams }: { searchParams: SP 
           <label><span className="lbl">اللون على التابلت</span><input className="inp h-10" type="color" name="color" defaultValue="#7c4a2d" /></label>
           <label><span className="lbl">الترتيب</span><input className="inp" name="sortOrder" type="number" defaultValue={prods.length + 1} /></label>
           <datalist id="cats">{[...new Set(prods.map((p) => p.category).filter(Boolean))].map((c) => <option key={c} value={c!} />)}</datalist>
+          <label className="md:col-span-2 flex items-start gap-2 rounded-xl border p-3">
+            <input type="checkbox" name="createStock" className="w-5 h-5 mt-1" />
+            <span><b>يُباع كما اشتريته (ماء، قازوز، عصير علبة…)</b><br /><span className="muted text-xs">ينشئ مادة مخزون بنفس الاسم (بالقطعة) ويربطها بالمنتج: قطعة واحدة لكل بيع، فتظهر في «تسجيل شراء» وفي الجرد.</span></span>
+          </label>
           <div className="md:col-span-2"><button className="btn">إضافة</button></div>
         </form>
       </div>
