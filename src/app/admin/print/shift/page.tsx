@@ -42,17 +42,16 @@ export default async function PrintShift({ searchParams }: { searchParams: Promi
     .where(and(eq(stockMovements.refType, "opening"), gte(stockMovements.ts, begin), lte(stockMovements.ts, end)));
   const openAt = new Map(openings.map((o) => [o.id, o.ts]));
   const remaining = await Promise.all(stockRows.map(async (it) => ({ it, qty: await theoreticalAt(db, it.id, end), init: await theoreticalAt(db, it.id, openAt.get(it.id) ?? begin), counted: openAt.has(it.id) })));
-  const adds = (await db.select({ id: stockMovements.id, name: stockItems.nameAr, kind: stockItems.kind, ts: stockMovements.ts, d: stockMovements.deltaBase, note: stockMovements.note, type: stockMovements.type })
-    .from(stockMovements).innerJoin(stockItems, eq(stockItems.id, stockMovements.stockItemId))
-    .where(and(gte(stockMovements.ts, begin), lte(stockMovements.ts, end), eq(stockMovements.type, "purchase")))).filter((a) => a.d > 0);
-  // anything other than sales that moved the stock after the starting figure explains why start − sold ≠ remaining
-  const TYPE_AR: Record<string, string> = { purchase: "شراء", waste: "تالف", staff_consumption: "استهلاك العمال", correction: "تسوية", count_adjust: "تصحيح بالجرد", void: "طلب ملغى" };
-  const others = await db.select().from(stockMovements).where(and(gte(stockMovements.ts, begin), lte(stockMovements.ts, end)));
-  const cancelled = new Set(others.filter((m) => m.refType === "cancel").map((m) => Number(m.refId)));
+  // movements other than sales explain why start − sold ≠ remaining (purchase, waste, correction ...)
+  const TYPE_AR: Record<string, string> = { purchase: "شراء", waste: "تالف", staff_consumption: "استهلاك العمال", correction: "تسوية", count_adjust: "تصحيح بالجرد" };
+  const moves = await db.select().from(stockMovements).where(and(gte(stockMovements.ts, begin), lte(stockMovements.ts, end)));
+  const cancelled = new Set(moves.filter((m) => m.refType === "cancel").map((m) => Number(m.refId)));
   const explain = new Map<number, string>();
-  for (const m of others) {
-    if (m.type === "sale" || m.type === "void" || m.refType === "cancel" || m.refType === "opening" || cancelled.has(m.id)) continue;
+  const used = new Map<number, number>();
+  for (const m of moves) {
     if (openAt.has(m.stockItemId) && m.ts <= openAt.get(m.stockItemId)!) continue;
+    if (m.type === "sale" || m.type === "void") { used.set(m.stockItemId, (used.get(m.stockItemId) ?? 0) - m.deltaBase); continue; }
+    if (m.refType === "cancel" || m.refType === "opening" || cancelled.has(m.id)) continue;
     const it = stockRows.find((x) => x.id === m.stockItemId);
     if (!it) continue;
     const txt = `${m.deltaBase > 0 ? "+" : "−"}${formatQty(it.kind as StockKind, Math.abs(m.deltaBase))} ${m.note || TYPE_AR[m.type] || m.type} ${formatTunis(m.ts).slice(-5)}`;
@@ -79,15 +78,9 @@ export default async function PrintShift({ searchParams }: { searchParams: Promi
       <table className="pt"><thead><tr><th>المنتج</th><th>الكمية</th><th>القيمة</th></tr></thead><tbody>
         {[...perProduct].sort((a, b) => b[1].qty - a[1].qty).map(([n, p]) => <tr key={n}><td>{n}</td><td>{p.qty}</td><td>{formatDT(p.value)}</td></tr>)}
       </tbody></table>
-      {adds.length > 0 && (<>
-        <h2 className="font-bold mt-3 mb-1">مشتريات / كميات أضيفت خلال الشيفت</h2>
-        <table className="pt"><thead><tr><th>الوقت</th><th>الصنف</th><th>الكمية</th><th>ملاحظة</th></tr></thead><tbody>
-          {adds.map((a) => <tr key={a.id}><td dir="ltr">{formatTunis(a.ts)}</td><td>{a.name}</td><td dir="ltr" style={{ textAlign: "right" }}>+{formatQty(a.kind as StockKind, a.d)}</td><td>{a.note || "شراء كمية إضافية"}</td></tr>)}
-        </tbody></table>
-      </>)}
       <h2 className="font-bold mt-3 mb-1">المخزون: بداية الشيفت ونهايته (حسب النظام)</h2>
-      <table className="pt"><thead><tr><th>الصنف</th><th>المخزون في البداية</th><th>المتبقي في النهاية</th></tr></thead><tbody>
-        {remaining.map(({ it, qty, init, counted }) => <tr key={it.id}><td>{it.nameAr}</td><td dir="ltr" style={{ textAlign: "right" }}>{formatQty(it.kind as StockKind, init)}{counted ? " (جرد)" : ""}</td><td>{formatQty(it.kind as StockKind, qty)}{explain.get(it.id) ? <span style={{ fontWeight: 700 }}> ({explain.get(it.id)})</span> : null}</td></tr>)}
+      <table className="pt"><thead><tr><th>الصنف</th><th>المخزون في البداية</th><th>المستهلك (مبيعات)</th><th>المتبقي في النهاية</th></tr></thead><tbody>
+        {remaining.map(({ it, qty, init, counted }) => <tr key={it.id}><td>{it.nameAr}</td><td dir="ltr" style={{ textAlign: "right" }}>{formatQty(it.kind as StockKind, init)}{counted ? " (جرد)" : ""}</td><td dir="ltr" style={{ textAlign: "right" }}>{used.get(it.id) ? formatQty(it.kind as StockKind, used.get(it.id)!) : "—"}</td><td>{formatQty(it.kind as StockKind, qty)}{explain.get(it.id) ? <span style={{ fontWeight: 700 }}> ({explain.get(it.id)})</span> : null}</td></tr>)}
       </tbody></table>
       </>) : (<>
       <h2 className="font-bold mt-3 mb-1">الطلبات</h2>
