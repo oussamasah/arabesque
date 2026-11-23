@@ -1,6 +1,6 @@
-import { and, asc, eq, ne } from "drizzle-orm";
+import { and, asc, eq, gte, lte, ne } from "drizzle-orm";
 import { getDb } from "@/db";
-import { orderItems, orders, products, stockItems } from "@/db/schema";
+import { orderItems, orders, products, stockItems, stockMovements } from "@/db/schema";
 import { theoreticalAt } from "@/server/stock";
 import { getSettings } from "@/server/settings";
 import { formatQty, type StockKind } from "@/lib/units";
@@ -36,7 +36,11 @@ export default async function PrintShift({ searchParams }: { searchParams: Promi
   const end = new Date(Math.min(shiftEnd(day, shift, st.morning_start_hour, st.evening_start_hour).getTime(), Date.now()));
   const begin = shiftStart(day, shift, st.morning_start_hour, st.evening_start_hour);
   const stockRows = await db.select().from(stockItems).where(eq(stockItems.active, true)).orderBy(stockItems.nameAr);
-  const remaining = await Promise.all(stockRows.map(async (it) => ({ it, qty: await theoreticalAt(db, it.id, end), init: await theoreticalAt(db, it.id, begin) })));
+  // an opening count entered during this shift IS the starting stock of that item (the stock counted by the owner)
+  const openings = await db.select({ id: stockMovements.stockItemId, ts: stockMovements.ts }).from(stockMovements)
+    .where(and(eq(stockMovements.refType, "opening"), gte(stockMovements.ts, begin), lte(stockMovements.ts, end)));
+  const openAt = new Map(openings.map((o) => [o.id, o.ts]));
+  const remaining = await Promise.all(stockRows.map(async (it) => ({ it, qty: await theoreticalAt(db, it.id, end), init: await theoreticalAt(db, it.id, openAt.get(it.id) ?? begin), counted: openAt.has(it.id) })));
   const total = rows.reduce((a, o) => a + o.totalMillimes, 0);
   const cash = rows.filter((o) => o.paymentType === "cash").reduce((a, o) => a + o.totalMillimes, 0);
   const tk = rows.filter((o) => o.paymentType === "ticket");
@@ -59,7 +63,7 @@ export default async function PrintShift({ searchParams }: { searchParams: Promi
       </tbody></table>
       <h2 className="font-bold mt-3 mb-1">المخزون: بداية الشيفت ونهايته (حسب النظام)</h2>
       <table className="pt"><thead><tr><th>الصنف</th><th>المخزون في البداية</th><th>المتبقي في النهاية</th></tr></thead><tbody>
-        {remaining.map(({ it, qty, init }) => <tr key={it.id}><td>{it.nameAr}</td><td dir="ltr" style={{ textAlign: "right" }}>{formatQty(it.kind as StockKind, init)}</td><td dir="ltr" style={{ textAlign: "right" }}>{formatQty(it.kind as StockKind, qty)}</td></tr>)}
+        {remaining.map(({ it, qty, init, counted }) => <tr key={it.id}><td>{it.nameAr}</td><td dir="ltr" style={{ textAlign: "right" }}>{formatQty(it.kind as StockKind, init)}{counted ? " (جرد)" : ""}</td><td dir="ltr" style={{ textAlign: "right" }}>{formatQty(it.kind as StockKind, qty)}</td></tr>)}
       </tbody></table>
       <h2 className="font-bold mt-3 mb-1" style={{ breakBefore: "page" }}>الطلبات</h2>
       <table className="pt"><thead><tr><th>الوقت</th><th>الطلب</th><th>المحتوى</th><th>الدفع</th><th>المجموع</th></tr></thead><tbody>
