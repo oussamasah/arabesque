@@ -65,16 +65,16 @@ export default async function Dashboard({ searchParams }: { searchParams: SP }) 
         <section className="card xl:col-span-2 overflow-x-auto">
           <h2 className="h2 mb-2">الشيفتات (أمس واليوم)</h2>
           <table className="tbl">
-            <thead><tr><th>اليوم</th><th>الشيفت</th><th>المسؤول</th><th>طلبات</th><th>مجموع الطلبات</th><th>كاش مقبوض</th><th>تذاكر (عدد · قيمة)</th><th>غير مدفوع</th><th>ملغاة</th><th>الهامش المستعمل</th><th>فرق الكاش</th><th>الحالة</th></tr></thead>
+            <thead><tr><th>اليوم</th><th>الشيفت</th><th>المسؤول</th><th>طلبات</th><th>مجموع الطلبات</th><th>كاش مقبوض</th><th>تذاكر (عدد · قيمة)</th><th>غير مدفوع</th><th>ملغاة</th><th>الهامش المستعمل</th><th>فرق الكاش</th><th>الحالة</th><th></th></tr></thead>
             <tbody>
-              {rows.length === 0 && <tr><td colSpan={12} className="muted text-center">لا نشاط بعد</td></tr>}
+              {rows.length === 0 && <tr><td colSpan={13} className="muted text-center">لا نشاط بعد</td></tr>}
               {rows.map((r) => (
                 <tr key={r.businessDay + r.shift}>
                   <td className="num">{r.businessDay}</td><td>{SHIFT_AR[r.shift]}</td><td>{r.worker}</td>
                   <td className="num">{r.orders}</td><td><Money m={r.totalValue} /></td><td className="font-bold"><Money m={r.salesCash} /></td><td className="num">{r.ticketOrders} · <Money m={r.ticketValue} /></td><td>{r.unpaid ? <span className="badge badge-yellow">{r.unpaid} · <Money m={r.owedByWorker} /></span> : "—"}</td>
                   <td className="num">{r.voids}</td><td className="num">{r.marginUsedAvg === null ? "—" : `${r.marginUsedAvg}%`}</td>
                   <td>{r.cashVariance === null ? <span className="muted">لم يُعد</span> : <Money m={r.cashVariance} />}</td>
-                  <td><RiskDot color={r.color} /></td>
+                  <td><RiskDot color={r.color} /></td><td><a className="underline text-sm" target="_blank" href={`/admin/print/shift?day=${r.businessDay}&shift=${r.shift}`}>🖨️</a></td>
                 </tr>
               ))}
             </tbody>

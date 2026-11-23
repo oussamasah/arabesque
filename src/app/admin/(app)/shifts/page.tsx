@@ -98,7 +98,7 @@ export default async function ShiftsPage({ searchParams }: { searchParams: SP })
         <section className="card xl:col-span-3 overflow-x-auto">
           <h2 className="h2 mb-2">آخر 14 يوماً</h2>
           <table className="tbl">
-            <thead><tr><th>اليوم</th><th>الشيفت</th><th>المسؤول</th><th>طلبات</th><th>كاش</th><th>تذاكر</th><th>ملغاة</th><th>مراجعة</th><th>على العامل</th><th>هامش مستعمل (متوسط/أقصى)</th><th>فرق الكاش</th><th>تذاكر مطابقة</th><th>النقاط</th><th>الحالة</th></tr></thead>
+            <thead><tr><th>اليوم</th><th>الشيفت</th><th>المسؤول</th><th>طلبات</th><th>كاش</th><th>تذاكر</th><th>ملغاة</th><th>مراجعة</th><th>على العامل</th><th>هامش مستعمل (متوسط/أقصى)</th><th>فرق الكاش</th><th>تذاكر مطابقة</th><th>النقاط</th><th>الحالة</th><th>طباعة</th></tr></thead>
             <tbody>
               {rows.slice().reverse().map((r) => (
                 <tr key={r.businessDay + r.shift}>
@@ -107,7 +107,7 @@ export default async function ShiftsPage({ searchParams }: { searchParams: SP })
                   <td className="num">{r.marginUsedAvg ?? "—"}{r.marginUsedMax !== null ? ` / ${r.marginUsedMax}` : ""}</td>
                   <td>{r.cashVariance === null ? <span className="muted">—</span> : <Money m={r.cashVariance} />}</td>
                   <td>{r.ticketMismatch === null ? "—" : r.ticketMismatch ? <span className="badge badge-red">لا</span> : <span className="badge badge-green">نعم</span>}</td>
-                  <td className="num">{r.risk}</td><td><RiskDot color={r.color} /></td>
+                  <td className="num">{r.risk}</td><td><RiskDot color={r.color} /></td><td><a className="underline" target="_blank" href={`/admin/print/shift?day=${r.businessDay}&shift=${r.shift}`}>🖨️</a></td>
                 </tr>
               ))}
             </tbody>
