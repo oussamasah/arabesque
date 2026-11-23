@@ -107,7 +107,7 @@ export default async function ShiftsPage({ searchParams }: { searchParams: SP })
                   <td className="num">{r.marginUsedAvg ?? "—"}{r.marginUsedMax !== null ? ` / ${r.marginUsedMax}` : ""}</td>
                   <td>{r.cashVariance === null ? <span className="muted">—</span> : <Money m={r.cashVariance} />}</td>
                   <td>{r.ticketMismatch === null ? "—" : r.ticketMismatch ? <span className="badge badge-red">لا</span> : <span className="badge badge-green">نعم</span>}</td>
-                  <td className="num">{r.risk}</td><td><RiskDot color={r.color} /></td><td><a className="underline" target="_blank" href={`/admin/print/shift?day=${r.businessDay}&shift=${r.shift}`}>🖨️</a></td>
+                  <td className="num">{r.risk}</td><td><RiskDot color={r.color} /></td><td><a className="underline text-sm" target="_blank" href={`/admin/print/shift?day=${r.businessDay}&shift=${r.shift}`}>🖨️ الطلبات</a> <a className="underline text-sm" target="_blank" href={`/admin/print/shift?day=${r.businessDay}&shift=${r.shift}&view=stock`}>🖨️ المخزون</a></td>
                 </tr>
               ))}
             </tbody>

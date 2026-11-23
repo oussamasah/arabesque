@@ -74,7 +74,7 @@ export default async function Dashboard({ searchParams }: { searchParams: SP }) 
                   <td className="num">{r.orders}</td><td><Money m={r.totalValue} /></td><td className="font-bold"><Money m={r.salesCash} /></td><td className="num">{r.ticketOrders} · <Money m={r.ticketValue} /></td><td>{r.unpaid ? <span className="badge badge-yellow">{r.unpaid} · <Money m={r.owedByWorker} /></span> : "—"}</td>
                   <td className="num">{r.voids}</td><td className="num">{r.marginUsedAvg === null ? "—" : `${r.marginUsedAvg}%`}</td>
                   <td>{r.cashVariance === null ? <span className="muted">لم يُعد</span> : <Money m={r.cashVariance} />}</td>
-                  <td><RiskDot color={r.color} /></td><td><a className="underline text-sm" target="_blank" href={`/admin/print/shift?day=${r.businessDay}&shift=${r.shift}`}>🖨️</a></td>
+                  <td><RiskDot color={r.color} /></td><td><a className="underline text-sm" target="_blank" href={`/admin/print/shift?day=${r.businessDay}&shift=${r.shift}`}>🖨️ الطلبات</a> <a className="underline text-sm" target="_blank" href={`/admin/print/shift?day=${r.businessDay}&shift=${r.shift}&view=stock`}>🖨️ المخزون</a></td>
                 </tr>
               ))}
             </tbody>
