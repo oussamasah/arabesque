@@ -16,8 +16,9 @@ function Cards({ title, s }: { title: string; s: ProfitSummary }) {
   return (
     <section className="mb-5">
       <h2 className="h2 mb-2">{title} <span className="muted text-sm font-normal">({s.from}{s.from !== s.to ? ` → ${s.to}` : ""})</span></h2>
-      <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-8 gap-3">
-        <Stat label="الإيراد النقدي" value={<Money m={s.revenueCash} />} hint={<>مبيعات <Money m={s.salesCash} /> + سداد <Money m={s.creditRepayments} /></>} />
+      <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-9 gap-3">
+        <Stat label="كاش مقبوض (مبيعات)" value={<Money m={s.salesCash} />} hint={<>+ سداد كريدي <Money m={s.creditRepayments} /></>} />
+        <Stat label="تذاكر" value={<Money m={s.ticketValue} />} hint={`${s.ticketOrders} طلب`} />
         <Stat label="المشتريات + متغيرة" value={<Money m={s.purchases + s.otherVariable} />} hint={<>مشتريات <Money m={s.purchases} /></>} />
         <Stat label="ثابتة (موزعة)" value={<Money m={s.fixedProrated} />} />
         <Stat label="الربح (نقدي)" value={<Money m={s.profitCash} />} tone={s.profitCash >= 0 ? "good" : "bad"} hint="الإيراد − المشتريات − المصاريف" />
@@ -64,13 +65,13 @@ export default async function Dashboard({ searchParams }: { searchParams: SP }) 
         <section className="card xl:col-span-2 overflow-x-auto">
           <h2 className="h2 mb-2">الشيفتات (أمس واليوم)</h2>
           <table className="tbl">
-            <thead><tr><th>اليوم</th><th>الشيفت</th><th>المسؤول</th><th>طلبات</th><th>مبيعات كاش</th><th>تذاكر</th><th>ملغاة</th><th>الهامش المستعمل</th><th>فرق الكاش</th><th>الحالة</th></tr></thead>
+            <thead><tr><th>اليوم</th><th>الشيفت</th><th>المسؤول</th><th>طلبات</th><th>مجموع الطلبات</th><th>كاش مقبوض</th><th>تذاكر (عدد · قيمة)</th><th>غير مدفوع</th><th>ملغاة</th><th>الهامش المستعمل</th><th>فرق الكاش</th><th>الحالة</th></tr></thead>
             <tbody>
-              {rows.length === 0 && <tr><td colSpan={10} className="muted text-center">لا نشاط بعد</td></tr>}
+              {rows.length === 0 && <tr><td colSpan={12} className="muted text-center">لا نشاط بعد</td></tr>}
               {rows.map((r) => (
                 <tr key={r.businessDay + r.shift}>
                   <td className="num">{r.businessDay}</td><td>{SHIFT_AR[r.shift]}</td><td>{r.worker}</td>
-                  <td className="num">{r.orders}</td><td><Money m={r.salesCash} /></td><td className="num">{r.ticketOrders}</td>
+                  <td className="num">{r.orders}</td><td><Money m={r.totalValue} /></td><td className="font-bold"><Money m={r.salesCash} /></td><td className="num">{r.ticketOrders} · <Money m={r.ticketValue} /></td><td>{r.unpaid ? <span className="badge badge-yellow">{r.unpaid} · <Money m={r.owedByWorker} /></span> : "—"}</td>
                   <td className="num">{r.voids}</td><td className="num">{r.marginUsedAvg === null ? "—" : `${r.marginUsedAvg}%`}</td>
                   <td>{r.cashVariance === null ? <span className="muted">لم يُعد</span> : <Money m={r.cashVariance} />}</td>
                   <td><RiskDot color={r.color} /></td>
