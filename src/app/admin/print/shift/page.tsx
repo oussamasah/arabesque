@@ -73,8 +73,8 @@ export default async function PrintShift({ searchParams }: { searchParams: Promi
         </tbody></table>
       </>)}
       <h2 className="font-bold mt-3 mb-1">المخزون: بداية الشيفت ونهايته (حسب النظام)</h2>
-      <table className="pt"><thead><tr><th>الصنف</th><th>المخزون في البداية</th><th>المتبقي في النهاية</th></tr></thead><tbody>
-        {remaining.map(({ it, qty, init, counted }) => <tr key={it.id}><td>{it.nameAr}</td><td dir="ltr" style={{ textAlign: "right" }}>{formatQty(it.kind as StockKind, init)}{counted ? " (جرد)" : ""}</td><td dir="ltr" style={{ textAlign: "right" }}>{formatQty(it.kind as StockKind, qty)}</td></tr>)}
+      <table className="pt"><thead><tr><th>الصنف</th><th>المخزون في البداية</th><th>المتبقي في النهاية</th><th>ملاحظة</th></tr></thead><tbody>
+        {remaining.map(({ it, qty, init, counted }) => <tr key={it.id}><td>{it.nameAr}</td><td dir="ltr" style={{ textAlign: "right" }}>{formatQty(it.kind as StockKind, init)}{counted ? " (جرد)" : ""}</td><td dir="ltr" style={{ textAlign: "right" }}>{formatQty(it.kind as StockKind, qty)}</td><td>{adds.filter((a) => a.name === it.nameAr).map((a) => `+${formatQty(a.kind as StockKind, a.d)} ${a.note || "شراء كمية إضافية"} (${formatTunis(a.ts).slice(-5)})`).join(" ، ")}</td></tr>)}
       </tbody></table>
       </>) : (<>
       <h2 className="font-bold mt-3 mb-1">الطلبات</h2>
