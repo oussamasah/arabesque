@@ -35,6 +35,7 @@ export async function pullConfig(): Promise<DeviceConfig> {
   if (r.status === 401) throw new Unauthorized("unauthorized");
   if (!r.ok) throw new Error(`config ${r.status}`);
   const cfg = (await r.json()) as DeviceConfig;
+  cfg.fetched_at = t0; // anything sent after the request started may not be in the server's open list yet
   await updateOffset(cfg.server_time, t0, t1);
   await saveConfig(cfg);
   return cfg;

@@ -80,8 +80,11 @@ export default function PosApp() {
     if (syncing.current || !paired) return;
     syncing.current = true;
     try {
+      const before = await pendingCount();
       const left = await pushPending();
       setPending(left);
+      // something was sent: fetch the server's open-orders list right away (keeps the unpaid list exact)
+      if (before > left) pullConfig().then(setConfig).catch(() => {});
       setOnline(true);
       backoff.current = 5000;
     } catch (e) {
@@ -129,7 +132,7 @@ export default function PosApp() {
   }, [paired, syncNow, refreshConfig]);
 
   const refreshUnpaid = useCallback(async () => {
-    try { setUnpaid(await listUnpaid(config?.open_orders, config?.open_order_details)); } catch { /* ignore */ }
+    try { setUnpaid(await listUnpaid(config?.open_orders, config?.open_order_details, config?.fetched_at ?? 0)); } catch { /* ignore */ }
   }, [config]);
   useEffect(() => { if (paired) void refreshUnpaid(); }, [paired, refreshUnpaid]);
 
@@ -264,7 +267,7 @@ export default function PosApp() {
               في الانتظار: {pending} ⟳
             </button>
           )}
-          <button onClick={() => { void refreshUnpaid(); setStep("unpaid"); }} data-testid="unpaid-btn"
+          <button onClick={() => { void refreshUnpaid(); setStep("unpaid"); pullConfig().then(setConfig).catch(() => {}); }} data-testid="unpaid-btn"
             className={`rounded-full px-4 py-2 font-bold ${unpaid.length ? "bg-yellow-300 text-black" : "bg-white/20"}`}>
             غير مدفوعة: {unpaid.length}
           </button>

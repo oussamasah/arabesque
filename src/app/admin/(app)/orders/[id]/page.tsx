@@ -105,11 +105,11 @@ export default async function OrderPage({ params, searchParams }: { params: Prom
           )}
           {o.status !== "void" && (
             <form action={voidOrderAction} className="space-y-2">
-              <h2 className="h2">إلغاء الطلب</h2>
-              <p className="muted text-xs">يُرجع المخزون، يعيد التذكرة صالحة، ويعكس دين الكريدي. يُسجَّل في سجل التدقيق.</p>
+              <h2 className="h2">حذف الطلب</h2>
+              <p className="muted text-xs">يختفي من قائمة الطلبات ومن التابلت، يُرجع المخزون، يعيد التذكرة صالحة، ويعكس دين الكريدي. يبقى في «المحذوفة» وسجل التدقيق.</p>
               <Back value={back} /><input type="hidden" name="orderId" value={o.id} />
-              <input className="inp" name="reason" placeholder="السبب (مطلوب)" required />
-              <button className="btn btn-danger w-full">إلغاء</button>
+              <input className="inp" name="reason" placeholder="السبب (اختياري)" />
+              <button className="btn btn-danger w-full">حذف الطلب</button>
             </form>
           )}
           <div>

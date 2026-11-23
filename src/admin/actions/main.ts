@@ -1,7 +1,7 @@
 "use server";
 /** All admin mutations (Owner only, password + 2FA, audited, transactional). */
-import { and, eq, isNull } from "drizzle-orm";
-import { alerts, stockItems } from "@/db/schema";
+import { and, eq, inArray, isNull } from "drizzle-orm";
+import { alerts, orders, stockItems } from "@/db/schema";
 import { run } from "@/admin/act";
 import { createProduct, saveRecipe, setPrice, updateProduct, type RecipeLineInput } from "@/server/catalog";
 import {
@@ -181,8 +181,31 @@ export async function creditAdjustAction(fd: FormData) {
 }
 
 // ---------------------------------------------------------------- orders
+/** Delete (= cancel) one order from its page; the owner then returns to the list where deleted orders are hidden. */
 export async function voidOrderAction(fd: FormData) {
-  await run(fd, async ({ db, actor, ip, f }) => { await voidOrder(db, f.str("orderId", true), f.str("reason", true), actor, ip); }, "تم إلغاء الطلب ✓");
+  await run(fd, async ({ db, actor, ip, f }) => {
+    const id = f.str("orderId", true);
+    const [o] = await db.select({ day: orders.businessDay }).from(orders).where(eq(orders.id, id));
+    await voidOrder(db, id, f.str("reason") || "حذف من الإدارة", actor, ip, { quiet: true });
+    return `/admin/orders?day=${o?.day ?? "all"}`;
+  }, "تم حذف الطلب ✓");
+}
+
+/** Delete several orders at once from the orders list (each one is cancelled and audited). */
+export async function deleteOrdersAction(fd: FormData) {
+  await run(fd, async ({ db, actor, ip, f }) => {
+    const ids = [...new Set(f.all("ids").filter((x) => /^[0-9a-f-]{36}$/i.test(x)))];
+    if (!ids.length) throw new Error("اختر طلباً واحداً على الأقل");
+    const reason = f.str("reason") || "حذف من الإدارة";
+    const rows = await db.select({ id: orders.id, status: orders.status }).from(orders).where(inArray(orders.id, ids));
+    let n = 0;
+    for (const r of rows) {
+      if (r.status === "void") continue;
+      await voidOrder(db, r.id, reason, actor, ip, { quiet: true });
+      n++;
+    }
+    if (!n) throw new Error("الطلبات المختارة محذوفة مسبقاً");
+  }, "تم حذف الطلبات ✓");
 }
 
 export async function approveOrderAction(fd: FormData) {

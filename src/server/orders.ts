@@ -260,7 +260,7 @@ export async function markOrderUnpaidLoss(db: Exec, orderId: string, reason: str
 }
 
 /** Admin-only void (spec §7.7): reverses stock, re-opens the ticket, reverses credit, audits. */
-export async function voidOrder(db: Exec, orderId: string, reason: string, actor: string, ip?: string | null) {
+export async function voidOrder(db: Exec, orderId: string, reason: string, actor: string, ip?: string | null, opts: { quiet?: boolean } = {}) {
   if (!reason.trim()) throw new Error("سبب الإلغاء مطلوب");
   const [o] = await db.select().from(orders).where(eq(orders.id, orderId));
   if (!o) throw new Error("طلب غير موجود");
@@ -286,7 +286,7 @@ export async function voidOrder(db: Exec, orderId: string, reason: string, actor
   await checkStockAlerts(db, [...new Set(mvs.map((m) => m.stockItemId))]);
   const s = await getSettings(db);
   const [r] = await db.select({ n: sql<string>`count(*)` }).from(orders).where(and(eq(orders.businessDay, o.businessDay), eq(orders.shift, o.shift), eq(orders.status, "void")));
-  if (Number(r.n) >= s.void_spike_count) {
+  if (!opts.quiet && Number(r.n) >= s.void_spike_count) {
     await raiseAlert(db, { severity: "warn", type: "void_spike", dedupeKey: `void_spike:${o.businessDay}:${o.shift}`, businessDay: o.businessDay, shift: o.shift, message: `${r.n} إلغاءات في شيفت ${o.businessDay} ${SHIFT_AR[o.shift as Shift]}` });
   }
 }

@@ -20,6 +20,8 @@ export interface DeviceConfig {
   open_order_details?: { id: string; label: string; table_ref: string | null; ts: number; items: { product_id: number; qty: number }[] }[];
   config_version: string;
   server_time: number;
+  /** local time when this config was received (orders synced after it are not in open_orders yet) */
+  fetched_at?: number;
 }
 
 export interface StoredEvent {
@@ -180,7 +182,7 @@ export interface UnpaidOrder {
  * Pay-later orders of this device not yet paid: created locally with payment "later", no local pay event,
  * and (once synced) still open on the server — so orders voided or settled by the Owner disappear.
  */
-export async function listUnpaid(serverOpen?: string[], serverDetails?: DeviceConfig["open_order_details"]): Promise<UnpaidOrder[]> {
+export async function listUnpaid(serverOpen?: string[], serverDetails?: DeviceConfig["open_order_details"], fetchedAt = 0): Promise<UnpaidOrder[]> {
   const db = await posDb();
   const deviceId = await db.get("meta", "device_id");
   const all = (await db.getAll("events")).filter((e) => e.envelope.device_id === deviceId && e.status !== "rejected");
@@ -189,8 +191,9 @@ export async function listUnpaid(serverOpen?: string[], serverDetails?: DeviceCo
   const local = all
     .filter((e) => e.envelope.type === "order.create" && (e.envelope.payload as OrderCreatePayload).payment === "later")
     .filter((e) => !paid.has(e.client_event_id))
-    // just-synced orders stay visible until the next config refresh (≤ 60 s) confirms them as open
-    .filter((e) => e.status === "pending" || !open || open.has(e.client_event_id) || (e.sent_at ?? 0) > Date.now() - 120_000)
+    // shown if not synced yet, or still open on the server, or synced after the last server list was fetched.
+    // An order deleted by the Owner is not in the server list any more → it disappears at the next refresh.
+    .filter((e) => e.status === "pending" || !open || open.has(e.client_event_id) || (e.sent_at ?? 0) > fetchedAt)
     .sort((a, b) => a.seq - b.seq)
     .map((e) => {
       const p = e.envelope.payload as OrderCreatePayload;
