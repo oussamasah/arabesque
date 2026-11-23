@@ -39,10 +39,11 @@ export default async function SheetPage({ params, searchParams }: { params: Prom
             <Back value={back} /><input type="hidden" name="sheetId" value={sheet.id} />
             <label className="block"><span className="lbl">النوع</span>
               <select className="inp" name="type" defaultValue={sheet.type}><option value="credit">كريدي (دين على الزبون)</option><option value="free">مجاني</option></select></label>
+            <label className="block"><span className="lbl">عدد التذاكر في الورقة (المستعملة لا تُحذف)</span><input className="inp" name="count" type="number" min={1} max={200} defaultValue={rows.filter((r) => r.t.status !== "void").length} required /></label>
             <label className="block"><span className="lbl">سقف لكل تذكرة (DT، اختياري)</span><input className="inp" name="cap" inputMode="decimal" dir="ltr" defaultValue={millimesToInput(sheet.maxAmountMillimes)} /></label>
             <label className="block"><span className="lbl">ملاحظة</span><input className="inp" name="note" defaultValue={sheet.note ?? ""} /></label>
             <button className="btn w-full">حفظ</button>
-            <p className="muted text-xs">يسري التعديل على التذاكر الصالحة فقط. التذاكر المستعملة تبقى كما كانت.</p>
+            <p className="muted text-xs">النوع والسقف والملاحظة تسري على التذاكر الصالحة فقط. زيادة العدد تضيف تذاكر جديدة (اطبع الورقة من جديد)، وتقليله يلغي تذاكر صالحة غير مستعملة.</p>
           </form>
           <div className="border-t pt-3">
             <CancelForm action={deleteSheetAction} back={back} id={sheet.id} idName="sheetId" label="حذف الورقة" confirm="تأكيد الحذف" withReason={false} />

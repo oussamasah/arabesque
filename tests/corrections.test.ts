@@ -158,7 +158,12 @@ describe("owner corrections keep history", () => {
     const toks = (await sheetForPrint(db, s.id)).tickets.map((t) => t.token!);
     await push(tab.event([{ product_id: seed.pCoffee.id, qty: 1 }], { at: at(10, 9), payment: "ticket", tokenHash: sha256Hex(toks[0]) }));
 
-    await updateSheet(db, s.id, { note: "ورقة نوفمبر", type: "free", maxAmountMillimes: 5000 }, "owner");
+    await updateSheet(db, s.id, { note: "ورقة نوفمبر", type: "free", maxAmountMillimes: 5000, count: 5 }, "owner"); // +2 tickets
+    expect((await db.select().from(S.tickets).where(and(eq(S.tickets.sheetId, s.id), eq(S.tickets.status, "issued"))))).toHaveLength(4);
+    await expect(updateSheet(db, s.id, { type: "free", count: 0 }, "owner")).rejects.toThrow();
+    await updateSheet(db, s.id, { note: "ورقة نوفمبر", type: "free", maxAmountMillimes: 5000, count: 3 }, "owner"); // back to 3: voids 2 unused
+    expect((await db.select().from(S.tickets).where(and(eq(S.tickets.sheetId, s.id), eq(S.tickets.status, "issued"))))).toHaveLength(2);
+    expect((await db.select().from(S.ticketSheets).where(eq(S.ticketSheets.id, s.id)))[0].ticketCount).toBe(3);
     const rows = await db.select().from(S.tickets).where(eq(S.tickets.sheetId, s.id));
     expect(rows.filter((t) => t.status === "issued").every((t) => t.type === "free" && t.maxAmountMillimes === 5000)).toBe(true);
     expect(rows.find((t) => t.status === "used")!.type).toBe("credit"); // history untouched
@@ -169,7 +174,7 @@ describe("owner corrections keep history", () => {
     expect(await deleteSheet(db, s.id, "owner")).toBe(2);
     expect((await validTicketHashes(db)).token_hashes).toHaveLength(0);
     const after = await db.select().from(S.tickets).where(eq(S.tickets.sheetId, s.id));
-    expect(after.filter((t) => t.status === "void")).toHaveLength(2);
+    expect(after.filter((t) => t.status === "void")).toHaveLength(4); // 2 removed by the count change + 2 by the delete
     expect(after.filter((t) => t.status === "used")).toHaveLength(1);
     await expect(sheetForPrint(db, s.id)).rejects.toThrow();
     await expect(deleteSheet(db, s.id, "owner")).rejects.toThrow();

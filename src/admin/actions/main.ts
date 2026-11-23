@@ -174,7 +174,7 @@ export async function voidTicketAction(fd: FormData) {
 
 export async function updateSheetAction(fd: FormData) {
   await run(fd, async ({ db, actor, f }) => {
-    await updateSheet(db, f.int("sheetId"), { note: f.opt("note"), type: f.str("type") === "credit" ? "credit" : "free", maxAmountMillimes: f.optMoney("cap") }, actor);
+    await updateSheet(db, f.int("sheetId"), { note: f.opt("note"), type: f.str("type") === "credit" ? "credit" : "free", maxAmountMillimes: f.optMoney("cap"), count: f.int("count") }, actor);
   }, "تم حفظ تعديل الورقة ✓");
 }
 

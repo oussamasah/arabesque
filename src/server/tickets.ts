@@ -26,6 +26,25 @@ export async function updateCustomer(db: Exec, id: number, c: { name: string; ph
   return row;
 }
 
+async function createTickets(db: Exec, sheet: typeof ticketSheets.$inferSelect, cust: { id: number; name: string }, n: number, now: Date, actor: string) {
+  for (let i = 0; i < n; i++) {
+    for (let attempt = 0; ; attempt++) {
+      const token = randomToken(16); // 128-bit random, unguessable
+      const code = randomShortCode(8);
+      try {
+        await db.insert(tickets).values({
+          id: crypto.randomUUID(), sheetId: sheet.id, tokenHash: sha256Hex(token), tokenEnc: encrypt(token, "ticket"),
+          shortCode: code, shortCodeHash: sha256Hex(code), type: sheet.type, customerId: cust.id, customerName: cust.name,
+          maxAmountMillimes: sheet.maxAmountMillimes, status: "issued", issuedAt: now, issuedBy: actor, note: sheet.note,
+        });
+        break;
+      } catch (e) {
+        if (attempt > 5) throw e; // astronomically unlikely collision: retry
+      }
+    }
+  }
+}
+
 /** Issue a printable sheet of single-use tickets for one customer (spec §7.6, Owner only). */
 export async function issueSheet(db: Exec, input: {
   customerId: number; type: "free" | "credit"; count: number; maxAmountMillimes?: number | null; note?: string | null;
@@ -40,22 +59,7 @@ export async function issueSheet(db: Exec, input: {
     customerId: cust.id, type: input.type, ticketCount: input.count, maxAmountMillimes: input.maxAmountMillimes ?? null,
     issuedAt: now, issuedBy: actor, note: input.note || null,
   }).returning();
-  for (let i = 0; i < input.count; i++) {
-    for (let attempt = 0; ; attempt++) {
-      const token = randomToken(16); // 128-bit random, unguessable
-      const code = randomShortCode(8);
-      try {
-        await db.insert(tickets).values({
-          id: crypto.randomUUID(), sheetId: sheet.id, tokenHash: sha256Hex(token), tokenEnc: encrypt(token, "ticket"),
-          shortCode: code, shortCodeHash: sha256Hex(code), type: input.type, customerId: cust.id, customerName: cust.name,
-          maxAmountMillimes: input.maxAmountMillimes ?? null, status: "issued", issuedAt: now, issuedBy: actor, note: input.note || null,
-        });
-        break;
-      } catch (e) {
-        if (attempt > 5) throw e; // astronomically unlikely collision: retry
-      }
-    }
-  }
+  await createTickets(db, sheet, cust, input.count, now, actor);
   await audit(db, actor, "ticket.issue_sheet", "ticket_sheet", sheet.id, null, { ...sheet });
   await resolveAlerts(db, `low_tickets:${cust.id}`);
   return sheet;
@@ -84,7 +88,7 @@ export async function voidTicket(db: Exec, ticketId: string, reason: string, act
  * Edit a sheet: note, type and cap. Used tickets are history and keep their type/cap;
  * only still-valid (issued) tickets follow the change (credit is charged at use, so changing the type of unused tickets is safe).
  */
-export async function updateSheet(db: Exec, sheetId: number, input: { note?: string | null; type: "free" | "credit"; maxAmountMillimes?: number | null }, actor: string) {
+export async function updateSheet(db: Exec, sheetId: number, input: { note?: string | null; type: "free" | "credit"; maxAmountMillimes?: number | null; count?: number }, actor: string) {
   const [before] = await db.select().from(ticketSheets).where(eq(ticketSheets.id, sheetId));
   if (!before || before.deletedAt) throw new Error("ورقة غير موجودة");
   if (!["free", "credit"].includes(input.type)) throw new Error("نوع غير صالح");
@@ -93,7 +97,24 @@ export async function updateSheet(db: Exec, sheetId: number, input: { note?: str
     .where(eq(ticketSheets.id, sheetId)).returning();
   await db.update(tickets).set({ note: input.note || null, type: input.type, maxAmountMillimes: input.maxAmountMillimes ?? null })
     .where(and(eq(tickets.sheetId, sheetId), eq(tickets.status, "issued")));
-  await audit(db, actor, "ticket.update_sheet", "ticket_sheet", sheetId, before, row);
+  // change the number of tickets: add new ones, or void unused ones (used tickets are never removed)
+  if (input.count !== undefined && input.count !== before.ticketCount) {
+    if (!Number.isInteger(input.count) || input.count < 1 || input.count > 200) throw new Error("عدد التذاكر بين 1 و 200");
+    const all = await db.select().from(tickets).where(eq(tickets.sheetId, sheetId));
+    const active = all.filter((t) => t.status !== "void");
+    const used = all.filter((t) => t.status === "used").length;
+    if (input.count < used) throw new Error(`لا يمكن النزول تحت ${used} (تذاكر مستعملة)`);
+    if (input.count > active.length) {
+      const [cust] = await db.select().from(customers).where(eq(customers.id, before.customerId));
+      await createTickets(db, row, { id: before.customerId, name: cust.name }, input.count - active.length, new Date(), actor);
+    } else if (input.count < active.length) {
+      const unused = active.filter((t) => t.status === "issued").sort((a, b) => (a.shortCode < b.shortCode ? 1 : -1)).slice(0, active.length - input.count);
+      for (const t of unused) await db.update(tickets).set({ status: "void", note: "تقليل عدد الورقة" }).where(eq(tickets.id, t.id));
+    }
+    await db.update(ticketSheets).set({ ticketCount: input.count }).where(eq(ticketSheets.id, sheetId));
+    await checkLowTickets(db, before.customerId);
+  }
+  await audit(db, actor, "ticket.update_sheet", "ticket_sheet", sheetId, before, { ...row, ticketCount: input.count ?? before.ticketCount });
   return row;
 }
 
