@@ -30,6 +30,7 @@ function currentShift(settings: DeviceConfig["settings"], nowMs = Date.now()) {
 const hhmm = (t: number) => new Date(t).toLocaleTimeString("fr-TN", { hour: "2-digit", minute: "2-digit", hour12: false });
 type TicketState = { status: "idle" | "checking" | "valid" | "invalid"; tokenHash?: string; codeHash?: string };
 
+const TILE_H = 150;
 const MAX_QTY = 99;
 const MAX_LINES = 60;
 const ADDONS = "إضافات";
@@ -81,16 +82,24 @@ export default function PosApp() {
   }, []);
 
   // ---------------------------------------------------------------- layout: page size without scrolling
+  // measured from the real grid area (tile = 150 px high + 12 px gap), so nothing is ever cut off
+  const gridArea = useRef<HTMLElement | null>(null);
   useEffect(() => {
+    if (!ready || !config) return;
     const calc = () => {
-      const cols = Math.max(2, Math.floor((window.innerWidth - 32) / 180));
-      const rows = Math.max(2, Math.floor((window.innerHeight - 250) / 175));
+      const el = gridArea.current;
+      const w = el?.clientWidth ?? window.innerWidth;
+      const h = el?.clientHeight ?? window.innerHeight - 300;
+      const cols = Math.max(2, Math.floor((w - 32 + 12) / (165 + 12)));
+      const rows = Math.max(1, Math.floor((h - 16 + 12) / (TILE_H + 12)));
       setPerPage(cols * rows);
     };
     calc();
+    const ro = new ResizeObserver(calc);
+    if (gridArea.current) ro.observe(gridArea.current);
     window.addEventListener("resize", calc);
-    return () => window.removeEventListener("resize", calc);
-  }, []);
+    return () => { ro.disconnect(); window.removeEventListener("resize", calc); };
+  }, [ready, config]);
 
   // ---------------------------------------------------------------- sync loop (5 s → 5 min backoff), config every 60 s
   const syncNow = useCallback(async () => {
@@ -322,21 +331,21 @@ export default function PosApp() {
       )}
 
       {/* product grid */}
-      <main className="flex-1 px-4 py-2 overflow-hidden">
+      <main ref={gridArea} className="flex-1 min-h-0 px-4 py-2 overflow-hidden">
         <div className="grid gap-3 h-full content-start" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(165px, 1fr))" }}>
           {pageItems.map((p) => {
             const q = cart[p.id] ?? 0;
             return (
               <div key={p.id} className="relative">
                 <button onClick={() => add(p.id)} data-testid={`tile-${p.id}`}
-                  className="pos-tile w-full flex-col gap-1" style={{ background: p.color || "#7c4a2d" }}>
+                  className="pos-tile w-full flex-col gap-0.5" style={{ background: p.color || "#7c4a2d", height: TILE_H }}>
                   {p.image && (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={p.image} alt="" draggable={false} className="w-20 h-20 rounded-2xl bg-white/95 p-1 pointer-events-none" />
+                    <img src={p.image} alt="" draggable={false} className="w-14 h-14 rounded-xl bg-white/95 p-1 pointer-events-none" />
                   )}
-                  <span className="text-2xl font-bold leading-tight drop-shadow">{p.name_ar}</span>
+                  <span className="text-xl font-bold leading-tight drop-shadow">{p.name_ar}</span>
                   {showPrices && p.price_millimes != null && (
-                    <span className="mt-1 rounded-full bg-white text-black px-3 py-0.5 text-2xl font-black shadow" dir="ltr">{dt(p.price_millimes)} د</span>
+                    <span className="rounded-full bg-white text-black px-3 text-xl font-black shadow leading-snug" dir="ltr">{dt(p.price_millimes)} د</span>
                   )}
                 </button>
                 {q > 0 && (
@@ -373,7 +382,7 @@ export default function PosApp() {
       {step === "confirm" && (
         <Modal>
           <h2 className="text-3xl font-bold mb-4">تأكيد الطلب</h2>
-          <ul className="text-2xl space-y-2 max-h-[40vh] overflow-auto mb-4">
+          <ul className="text-2xl space-y-2 max-h-[40vh] pos-scroll mb-4">
             {lines.map((l) => (
               <li key={l.product?.id} className="flex justify-between border-b pb-2"><span>{l.product?.name_ar ?? "?"}</span>
                 <span className="font-black">× {l.qty}{showPrices && <span className="font-bold text-gray-600 mr-4" dir="ltr">{dt((l.product?.price_millimes ?? 0) * l.qty)}</span>}</span></li>
@@ -440,7 +449,7 @@ export default function PosApp() {
                 className="flex-1 min-w-48 text-2xl rounded-xl px-4 py-2 bg-white text-black" />
               <button className="pos-btn bg-white text-[var(--brand)] px-8" onClick={() => { setUnpaidQuery(""); setStep("cart"); }}>رجوع</button>
             </div>
-            <div className="flex-1 overflow-y-auto p-3">
+            <div className="flex-1 min-h-0 pos-scroll p-3">
               {list.length === 0 ? <p className="text-3xl text-gray-500 text-center py-16">{unpaid.length ? "لا نتيجة" : "لا توجد طلبات غير مدفوعة ✓"}</p> : (
                 <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(250px, 1fr))" }}>
                   {list.map((o) => {
@@ -502,7 +511,7 @@ export default function PosApp() {
 function Modal({ children }: { children: React.ReactNode }) {
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-40 p-4">
-      <div className="bg-white rounded-3xl p-6 w-full max-w-2xl max-h-[95vh] overflow-auto">{children}</div>
+      <div className="bg-white rounded-3xl p-6 w-full max-w-2xl max-h-[95vh] pos-scroll">{children}</div>
     </div>
   );
 }
@@ -583,7 +592,7 @@ function ShiftScreen({ data, unpaidIds, showPrices, totalOf, nameOf, labelOf, on
         <SumCard label="تذاكر" value={String(tickets)} />
         <SumCard label="غير مدفوع" value={showPrices ? `${unpaidCount} · ${dt(unpaidSum)} د` : String(unpaidCount)} cls={unpaidCount ? "border-4 border-yellow-400" : ""} />
       </div>
-      <div className="flex-1 overflow-y-auto px-3 pb-3">
+      <div className="flex-1 min-h-0 pos-scroll px-3 pb-3">
         {!data ? <p className="text-3xl text-center py-16">…</p> : orders.length === 0 && payments.length === 0 ? (
           <p className="text-3xl text-gray-500 text-center py-16">لا توجد طلبات في هذا الشيفت بعد</p>
         ) : (
