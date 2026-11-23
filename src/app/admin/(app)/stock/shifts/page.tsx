@@ -1,11 +1,13 @@
 import Link from "next/link";
 import { getDb } from "@/db";
-import { shiftStockReport } from "@/server/stock";
+import { shiftStockReport, theoreticalAt } from "@/server/stock";
+import { stockItems } from "@/db/schema";
+import { eq } from "drizzle-orm";
 import { workerFor } from "@/server/finance";
 import { getSettings } from "@/server/settings";
 import { Flash, Money, PageTitle, one, type SP } from "@/admin/ui";
-import { addDays, formatTunis, shiftInfo, SHIFT_AR } from "@/lib/time";
-import { formatQty } from "@/lib/units";
+import { addDays, formatTunis, shiftEnd, shiftInfo, SHIFT_AR } from "@/lib/time";
+import { formatQty, type StockKind } from "@/lib/units";
 
 export const dynamic = "force-dynamic";
 
@@ -21,7 +23,13 @@ export default async function ShiftStockPage({ searchParams }: { searchParams: S
   const cur = shiftInfo(new Date(), s.morning_start_hour, s.evening_start_hour);
   const bad = rows.filter((r) => r.shortages > 0);
   const missing = rows.filter((r) => !r.counted && r.orders > 0 && !(r.businessDay === cur.businessDay && r.shift === cur.shift));
-  const withWorker = await Promise.all(rows.map(async (r) => ({ r, worker: await workerFor(db, r.businessDay, r.shift, s) })));
+  const items = await db.select().from(stockItems).where(eq(stockItems.active, true)).orderBy(stockItems.nameAr);
+  // remaining stock at the END of each shift as the system sees it (orders, purchases, losses; for the current shift: now)
+  const withWorker = await Promise.all(rows.map(async (r) => {
+    const end = new Date(Math.min(shiftEnd(r.businessDay, r.shift, s.morning_start_hour, s.evening_start_hour).getTime(), Date.now()));
+    const remaining = await Promise.all(items.map(async (it) => ({ it, qty: await theoreticalAt(db, it.id, end) })));
+    return { r, worker: await workerFor(db, r.businessDay, r.shift, s), remaining };
+  }));
   return (
     <>
       <Flash sp={sp} />
@@ -44,7 +52,7 @@ export default async function ShiftStockPage({ searchParams }: { searchParams: S
 
       {rows.length === 0 && <p className="muted">لا توجد طلبات ولا جرد في هذه الفترة.</p>}
       <div className="space-y-4">
-        {withWorker.map(({ r, worker }) => {
+        {withWorker.map(({ r, worker, remaining }) => {
           const isCur = r.businessDay === cur.businessDay && r.shift === cur.shift;
           const badge = !r.counted ? (isCur ? { t: "الشيفت الحالي", c: "badge-gray" } : { t: "لم يُجرد", c: "badge-yellow" })
             : r.shortages ? { t: `نقص في ${r.shortages}`, c: "badge-red" } : { t: "مطابق ✓", c: "badge-green" };
@@ -56,6 +64,16 @@ export default async function ShiftStockPage({ searchParams }: { searchParams: S
                 <span className="muted text-sm">المسؤول: {worker} · {r.orders} طلب</span>
                 <Link className="underline text-sm mr-auto" href={`/admin/orders?day=${r.businessDay}`}>الطلبات</Link>
               </div>
+              <details className="mb-2">
+                <summary className="cursor-pointer font-semibold text-sm">📦 المخزون المتبقي في نهاية الشيفت (حسب النظام)</summary>
+                <div className="grid gap-2 mt-2" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(190px, 1fr))" }}>
+                  {remaining.map(({ it, qty }) => (
+                    <div key={it.id} className={`rounded-lg border px-3 py-2 text-sm ${qty < 0 ? "bg-red-50 border-red-200" : "bg-gray-50"}`}>
+                      <span className="font-semibold">{it.nameAr}</span>: <span className="num font-bold">{formatQty(it.kind as StockKind, qty)}</span>
+                    </div>
+                  ))}
+                </div>
+              </details>
               {r.counted && (
                 <div className="overflow-x-auto">
                   <table className="tbl">
