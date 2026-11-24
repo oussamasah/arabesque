@@ -88,6 +88,7 @@ describe("orders & stock", () => {
     expect(types).toContain("low_stock");
     expect(types).toContain("negative_stock"); // 48 - 54 = -6
     await db.delete(S.alerts);
+    await db.update(S.stockItems).set({ minQtyBase: 10 }).where(eq(S.stockItems.id, seed.water.id)); // above the minimum, but running out soon
     // early warning: 20 bottles left, consumption 54 in the last 7 days ≈ 7.7/day → < 3 days
     await recordPurchase(db, { stockItemId: seed.water.id, qtyBase: 26, totalMillimes: 13_000, ts: NOW, paidFrom: "owner" }, "test");
     await checkStockAlerts(db, [seed.water.id], NOW);

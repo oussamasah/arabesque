@@ -266,17 +266,18 @@ export async function checkStockAlerts(db: Exec, itemIds?: number[], now = new D
     if (!it.active) continue;
     const kind = it.kind as StockKind;
     const kNeg = `negative_stock:${it.id}`, kLow = `low_stock:${it.id}`, kRun = `stock_running_out:${it.id}`;
-    if (it.qtyBase < 0) await raiseAlert(db, { severity: "warn", type: "negative_stock", dedupeKey: kNeg, message: `مخزون سالب: "${it.nameAr}" = ${formatQty(kind, it.qtyBase)} — هل نسيت تسجيل شراء؟` });
+    // one clear alert per item: finished (<= 0) > low; "running out" only while there is still stock and a real consumption
+    if (it.qtyBase < 0) await raiseAlert(db, { severity: "warn", type: "negative_stock", dedupeKey: kNeg, message: `نفد "${it.nameAr}" والرصيد في النظام سالب (${formatQty(kind, it.qtyBase)}): سجّل الشراء أو أجرِ جرداً` });
     else await resolveAlerts(db, kNeg);
-    if (it.minQtyBase > 0 && it.qtyBase < it.minQtyBase) {
-      await raiseAlert(db, { severity: "warn", type: "low_stock", dedupeKey: kLow, message: `يجب الشراء: "${it.nameAr}" = ${formatQty(kind, it.qtyBase)} (الحد الأدنى ${formatQty(kind, it.minQtyBase)})` });
+    if (it.qtyBase >= 0 && it.minQtyBase > 0 && it.qtyBase < it.minQtyBase) {
+      await raiseAlert(db, { severity: "warn", type: "low_stock", dedupeKey: kLow, message: it.qtyBase === 0 ? `نفد "${it.nameAr}" (0) — يجب الشراء` : `"${it.nameAr}" قارب على النفاد: ${formatQty(kind, it.qtyBase)} (الحد الأدنى ${formatQty(kind, it.minQtyBase)})` });
     } else await resolveAlerts(db, kLow);
     const avg = await avgDailyConsumption(db, it.id, s.consumption_window_days, now);
-    const dl = daysLeft(it.qtyBase, avg);
-    if (dl !== null && dl <= s.reorder_days_ahead) {
+    const dl = it.qtyBase > 0 && avg > 0 ? daysLeft(it.qtyBase, avg) : null;
+    if (dl !== null && dl <= s.reorder_days_ahead && !(it.minQtyBase > 0 && it.qtyBase < it.minQtyBase)) {
       await raiseAlert(db, {
         severity: "warn", type: "stock_running_out", dedupeKey: kRun,
-        message: `المخزون سينفد خلال ${dl.toFixed(1)} يوم: "${it.nameAr}" = ${formatQty(kind, it.qtyBase)} (الاستهلاك ≈ ${formatQty(kind, Math.round(avg))}/يوم)`,
+        message: `"${it.nameAr}" يكفي نحو ${dl.toFixed(1)} يوم فقط (الرصيد ${formatQty(kind, it.qtyBase)}، الاستهلاك اليومي ≈ ${formatQty(kind, Math.round(avg))})`,
       });
     } else await resolveAlerts(db, kRun);
   }

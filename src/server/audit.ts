@@ -25,10 +25,14 @@ export interface AlertInput {
 /** Raise an alert. With a dedupeKey, a second alert is not created while one is still open (not acknowledged, not resolved). */
 export async function raiseAlert(db: Exec, a: AlertInput): Promise<boolean> {
   if (a.dedupeKey) {
-    const open = await db.select({ id: alerts.id }).from(alerts)
+    const open = await db.select({ id: alerts.id, message: alerts.message }).from(alerts)
       .where(and(eq(alerts.dedupeKey, a.dedupeKey), isNull(alerts.acknowledgedAt), isNull(alerts.resolvedAt)))
       .limit(1);
-    if (open.length) return false;
+    if (open.length) {
+      // keep one alert per subject but show the CURRENT figures, not those of the first time
+      if (open[0].message !== a.message) await db.update(alerts).set({ message: a.message }).where(eq(alerts.id, open[0].id));
+      return false;
+    }
   }
   await db.insert(alerts).values({
     severity: a.severity, type: a.type, message: a.message, ref: a.ref ?? null,
@@ -43,6 +47,7 @@ export async function resolveAlerts(db: Exec, dedupeKey: string) {
 }
 
 export const ALERT_TYPE_AR: Record<string, string> = {
+  missing_stock_count: "جرد المخزون غير مسجَّل",
   low_stock: "مخزون منخفض",
   stock_running_out: "المخزون سينفد قريباً",
   negative_stock: "مخزون سالب",

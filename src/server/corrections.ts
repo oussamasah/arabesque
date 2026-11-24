@@ -130,7 +130,7 @@ export async function editOrderItems(db: Exec, orderId: string, items: { product
   const [r] = await db.select({ n: sql<string>`count(*)` }).from(orders).where(isNull(orders.deviceId));
   const seq = Number(r.n) + 1;
   const newLabel = `ADM-${String(seq).padStart(4, "0")}`;
-  await voidOrder(db, o.id, `تعديل المنتجات ← ${newLabel}`, actor, ip);
+  await voidOrder(db, o.id, `تعديل المنتجات ← ${newLabel}`, actor, ip, { quiet: true });
   const id = crypto.randomUUID();
   const res = await createOrder(db, {
     id, deviceId: null, deviceSeq: seq, orderLabel: newLabel, clientTs: o.clientTs, effectiveTs: o.effectiveTs, receivedAt: new Date(),

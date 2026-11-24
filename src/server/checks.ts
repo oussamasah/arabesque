@@ -63,10 +63,12 @@ export async function runPeriodicChecks(db: Exec, now = new Date()) {
 
   // shifts that ended (> 6 h ago, last 3 days) with orders but no stock count → ask for the paper count
   const from = addDays(cur.businessDay, -3);
-  for (const r of await shiftStockReport(db, from, cur.businessDay)) {
+  const reports = await shiftStockReport(db, from, cur.businessDay);
+  for (const r of reports) {
     const key = `missing_count:${r.businessDay}:${r.shift}`;
     const ended = shiftEnd(r.businessDay, r.shift, s.morning_start_hour, s.evening_start_hour);
-    if (r.counted || r.orders === 0 || now.getTime() - ended.getTime() < 6 * 3_600_000) { if (r.counted) await resolveAlerts(db, key); continue; }
+    const laterCount = reports.some((x) => x.counted && (x.businessDay > r.businessDay || (x.businessDay === r.businessDay && x.shift === "evening" && r.shift === "morning")));
+    if (r.counted || laterCount || r.orders === 0 || now.getTime() - ended.getTime() < 6 * 3_600_000) { if (r.counted || laterCount) await resolveAlerts(db, key); continue; }
     await raiseAlert(db, {
       severity: "warn", type: "missing_stock_count", dedupeKey: key, businessDay: r.businessDay, shift: r.shift,
       message: `لم يُسجَّل جرد المخزون لشيفت ${r.businessDay} ${SHIFT_AR[r.shift]} (${r.orders} طلب) — أدخل ورقة الجرد`,

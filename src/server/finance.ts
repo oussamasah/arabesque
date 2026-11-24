@@ -213,7 +213,7 @@ export async function shiftRows(db: Exec, from: string, to: string): Promise<Shi
   const ord = await db.select({
     day: orders.businessDay, shift: orders.shift,
     n: sql<string>`count(*) filter (where ${orders.status} <> 'void')`,
-    voids: sql<string>`count(*) filter (where ${orders.status} = 'void')`,
+    voids: sql<string>`count(*) filter (where ${orders.status} = 'void' and coalesce(${orders.voidReason}, '') not like 'تعديل المنتجات%')`,
     tk: sql<string>`count(*) filter (where ${orders.status} <> 'void' and ${orders.paymentType} = 'ticket')`,
     tkv: sql<string>`coalesce(sum(${orders.totalMillimes}) filter (where ${orders.status} <> 'void' and ${orders.paymentType} = 'ticket'), 0)`,
     cashv: sql<string>`coalesce(sum(${orders.totalMillimes}) filter (where ${orders.status} <> 'void' and ${orders.paymentType} = 'cash'), 0)`,
