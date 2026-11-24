@@ -12,6 +12,8 @@ export interface DeviceConfig {
   business_name: string;
   device_name: string;
   products: { id: number; name_ar: string; name_fr: string | null; category: string | null; color: string | null; image?: string | null; sort_order: number; price_millimes?: number | null }[];
+  /** product id → names of the materials that ran out (a warning only, selling is not blocked) */
+  unavailable?: Record<string, string>;
   /** Owner setting: show prices and totals on the tablet */
   show_prices?: boolean;
   /** server totals (millimes) of this device's recent orders — used instead of recomputing with today's prices */

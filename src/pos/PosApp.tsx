@@ -346,6 +346,7 @@ export default function PosApp() {
                     <img src={p.image} alt="" draggable={false} className="w-14 h-14 rounded-xl bg-white/95 p-1 pointer-events-none" />
                   )}
                   <span className="text-xl font-bold leading-tight drop-shadow">{p.name_ar}</span>
+                  {config?.unavailable?.[p.id] && <span className="rounded-full bg-red-600 text-white px-2 text-base font-black leading-snug">⚠ غير متوفر</span>}
                   {showPrices && p.price_millimes != null && (
                     <span className="rounded-full bg-white text-black px-3 text-xl font-black shadow leading-snug" dir="ltr">{dt(p.price_millimes)} د</span>
                   )}
@@ -391,6 +392,9 @@ export default function PosApp() {
             ))}
           </ul>
           {showPrices && <p className="flex justify-between text-3xl font-black mb-4"><span>المجموع</span><span dir="ltr">{dt(cartTotal)} د</span></p>}
+          {lines.filter((l) => config?.unavailable?.[l.product?.id ?? 0]).map((l) => (
+            <p key={l.product?.id} className="bg-red-100 text-red-900 rounded-xl p-3 text-xl font-bold mb-2">⚠️ {l.product?.name_ar}: المخزون غير متوفر ({config?.unavailable?.[l.product?.id ?? 0]}) — تأكد قبل البيع وأعلم المسؤول</p>
+          ))}
           <p className="bg-amber-100 text-amber-900 rounded-xl p-3 text-xl font-bold mb-4">⚠️ تأكد من الطلب — لا يمكن إلغاؤه بعد التأكيد</p>
           <input value={tableRef} onChange={(e) => setTableRef(e.target.value)} maxLength={20} autoComplete="off"
             placeholder="الطاولة / اسم الزبون (اختياري)" className="w-full text-2xl border-2 rounded-xl p-3 mb-3" />

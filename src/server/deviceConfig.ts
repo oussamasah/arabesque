@@ -1,9 +1,9 @@
 import "server-only";
 import { and, asc, eq, gte, inArray, isNull, ne, or } from "drizzle-orm";
-import { devices, orderItems, orders, products } from "@/db/schema";
+import { devices, orderItems, orders, products, stockItems } from "@/db/schema";
 import type { Exec } from "@/db";
 import { getSettings } from "./settings";
-import { priceAt } from "./catalog";
+import { priceAt, recipeAt } from "./catalog";
 import { validTicketHashes } from "./tickets";
 import { sha256Hex } from "./crypto";
 import { canonicalJson } from "@/lib/canonical";
@@ -40,11 +40,21 @@ export async function buildDeviceConfig(db: Exec, dev: typeof devices.$inferSele
   const totals = withPrices ? await db.select({ id: orders.id, total: orders.totalMillimes }).from(orders).where(and(
     eq(orders.deviceId, dev.id), ne(orders.status, "void"), gte(orders.effectiveTs, new Date(now.getTime() - 2 * 86_400_000)),
   )) : [];
+  // products whose ingredients are not enough for one more unit (the names of the missing items only; never quantities)
+  const items = await db.select({ id: stockItems.id, name: stockItems.nameAr, qty: stockItems.qtyBase }).from(stockItems);
+  const unavailable: Record<string, string> = {};
+  for (const r of rows) {
+    const rec = await recipeAt(db, r.id, now);
+    if (!rec) continue;
+    const missing = rec.lines.map((l) => ({ l, it: items.find((x) => x.id === l.stockItemId) })).filter((x) => x.it && x.it.qty < x.l.qtyBase).map((x) => x.it!.name);
+    if (missing.length) unavailable[r.id] = missing.join("، ");
+  }
   const body = {
     business_name: s.business_name,
     device_name: dev.name,
     products: products_,
     show_prices: withPrices,
+    unavailable,
     ...(withPrices ? { order_totals: Object.fromEntries([...totals, ...open].map((t) => [t.id, t.total])) } : {}),
     void_orders: voided.map((v) => v.id),
     settings: { morning_start_hour: s.morning_start_hour, evening_start_hour: s.evening_start_hour },
