@@ -1,7 +1,7 @@
 "use server";
 /** All admin mutations (Owner only, password + 2FA, audited, transactional). */
 import { and, eq, inArray, isNull } from "drizzle-orm";
-import { alerts, orders, stockItems } from "@/db/schema";
+import { alerts, orders, stockItems, stockMovements } from "@/db/schema";
 import { run } from "@/admin/act";
 import { createProduct, saveRecipe, setPrice, updateProduct, type RecipeLineInput } from "@/server/catalog";
 import {
@@ -424,6 +424,25 @@ import {
 
 export async function cancelMovementAction(fd: FormData) {
   await run(fd, async ({ db, actor, f }) => { await cancelMovement(db, f.int("id"), f.str("reason", true), actor); }, "تم الإلغاء ✓");
+}
+
+export async function editPurchaseAction(fd: FormData) {
+  await run(fd, async ({ db, actor, f }) => {
+    const id = f.int("id");
+    const [m] = await db.select().from(stockMovements).where(eq(stockMovements.id, id));
+    if (!m || m.type !== "purchase") throw new Error("شراء غير موجود");
+    const [it] = await db.select().from(stockItems).where(eq(stockItems.id, m.stockItemId));
+    const drawer = f.bool("fromDrawer");
+    const ts = f.str("ts") ? f.time("ts") : m.ts;
+    const invoiceRef = f.opt("invoiceRef");
+    if (drawer && !invoiceRef) throw new Error("دُفع من الدرج: رقم الفاتورة مطلوب");
+    await cancelMovement(db, id, "تعديل الشراء", actor);
+    await recordPurchase(db, {
+      stockItemId: it.id, qtyBase: bigToBase(it.kind as StockKind, f.str("qty", true)), totalMillimes: f.money("total"),
+      ts, paidFrom: drawer ? "drawer" : "owner", paidAt: drawer ? ts : null, invoiceRef, note: f.opt("note"),
+    }, actor);
+    return "/admin/stock/purchase";
+  }, "تم تعديل الشراء ✓");
 }
 
 export async function cancelStockCountAction(fd: FormData) {

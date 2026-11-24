@@ -36,7 +36,7 @@ export async function RecentMovements({ types, back, title }: { types: string[];
                 <td className="num">{formatQty(kind as StockKind, Math.abs(m.deltaBase))}</td>
                 <td>{types.includes("purchase") ? (m.refType === "opening" ? <span className="badge badge-gray">افتتاحي</span> : e ? <Money m={e.amountMillimes} /> : "—") : TYPE_AR[m.type]}</td>
                 <td className="text-xs">{e?.invoiceRef ? `فاتورة ${e.invoiceRef} · ` : ""}{m.note}</td>
-                <td>{isCancelled ? <span className="badge badge-gray">ملغى</span> : <CancelForm action={cancelMovementAction} back={back} id={m.id} />}</td>
+                <td>{isCancelled ? <span className="badge badge-gray">ملغى</span> : (<div className="flex gap-2 items-center">{m.type === "purchase" && m.refType !== "opening" && <a className="btn btn-ghost btn-sm" href={`/admin/stock/purchase/${m.id}`}>✏️ تعديل</a>}<CancelForm action={cancelMovementAction} back={back} id={m.id} /></div>)}</td>
               </tr>
             );
           })}
