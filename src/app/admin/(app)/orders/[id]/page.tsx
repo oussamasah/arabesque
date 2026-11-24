@@ -93,8 +93,8 @@ export default async function OrderPage({ params, searchParams }: { params: Prom
             </form>
           )}
           {o.status !== "void" && o.paymentType !== "loss" && (
-            <details>
-              <summary className="h2 cursor-pointer">تعديل المنتجات</summary>
+            <details open>
+              <summary className="btn w-full cursor-pointer list-none text-center">✏️ تعديل المنتجات أو الكمية</summary>
               <form action={editOrderAction} className="space-y-2 mt-2">
                 <Back value={back} /><input type="hidden" name="orderId" value={o.id} />
                 <OrderItemsPicker products={picker} initial={Object.fromEntries(qtyOf)} />
