@@ -12,6 +12,29 @@ import { ALERT_TYPE_AR } from "@/server/audit";
 
 export const dynamic = "force-dynamic";
 
+function Summary({ rows }: { rows: { title: string; s: ProfitSummary }[] }) {
+  return (
+    <section className="mb-5">
+      <div className="grid md:grid-cols-3 gap-3">
+        {rows.map(({ title, s }) => {
+          const expenses = s.purchases + s.otherVariable + s.fixedProrated;
+          return (
+            <div key={title} className="card">
+              <h2 className="h2 mb-2">{title} <span className="muted text-sm font-normal">({s.from}{s.from !== s.to ? ` → ${s.to}` : ""})</span></h2>
+              <dl className="space-y-2">
+                <div className="flex justify-between items-baseline"><dt>💰 المبيعات <span className="muted text-xs">(كاش + سداد كريدي)</span></dt><dd className="text-xl font-black"><Money m={s.revenueCash} /></dd></div>
+                <div className="flex justify-between items-baseline"><dt>🧾 المصاريف <span className="muted text-xs">(مشتريات + ثابتة + أخرى)</span></dt><dd className="text-xl font-black"><Money m={expenses} /></dd></div>
+                <div className={`flex justify-between items-baseline border-t pt-2 ${s.profitCash >= 0 ? "text-green-700" : "text-red-700"}`}><dt className="font-bold">📈 الربح</dt><dd className="text-2xl font-black"><Money m={s.profitCash} /></dd></div>
+              </dl>
+              <p className="muted text-xs mt-2">وخارج الحساب: تذاكر <Money m={s.ticketValue} /> ({s.ticketOrders} طلب) · غير مدفوع <Money m={s.unpaidValue} /> ({s.unpaidCount})</p>
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
 function Cards({ title, s }: { title: string; s: ProfitSummary }) {
   return (
     <section className="mb-5">
@@ -57,9 +80,13 @@ export default async function Dashboard({ searchParams }: { searchParams: SP }) 
         <Link href="/admin/orders/new" className="btn btn-ghost">+ طلب يدوي</Link>
         <Link href="/admin/stock/count" className="btn">جرد / تسليم شيفت</Link>
       </PageTitle>
-      <Cards title="اليوم" s={d} />
-      <Cards title="هذا الأسبوع" s={w} />
-      <Cards title="هذا الشهر" s={m} />
+      <Summary rows={[{ title: "اليوم", s: d }, { title: "هذا الأسبوع", s: w }, { title: "هذا الشهر", s: m }]} />
+      <details className="mb-5">
+        <summary className="cursor-pointer font-semibold mb-2">تفاصيل أكثر (الربح بالاستهلاك، المجاني، الكريدي…)</summary>
+        <Cards title="اليوم" s={d} />
+        <Cards title="هذا الأسبوع" s={w} />
+        <Cards title="هذا الشهر" s={m} />
+      </details>
 
       <div className="grid xl:grid-cols-3 gap-4">
         <section className="card xl:col-span-2 overflow-x-auto">
