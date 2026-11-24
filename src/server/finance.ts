@@ -8,6 +8,7 @@ import { audit, raiseAlert } from "./audit";
 import { getSettings, type Settings } from "./settings";
 import { priceAt, recipeAt } from "./catalog";
 import { costAt } from "./stock";
+import { wagesInRange } from "./wages";
 import { assertInt, formatDT, roundHalfUp } from "@/lib/money";
 import { daysInMonth, eachDay, shiftEnd, shiftStart, SHIFT_AR, tunisParts, type Shift } from "@/lib/time";
 
@@ -139,7 +140,7 @@ export async function recordCashCount(db: Exec, input: {
 export interface ProfitSummary {
   from: string; to: string;
   salesCash: number; creditRepayments: number; revenueCash: number;
-  purchases: number; otherVariable: number; fixedProrated: number;
+  purchases: number; otherVariable: number; fixedProrated: number; wages: number;
   freeGiveawaysCost: number; creditChargedValue: number; creditOutstanding: number;
   cogs: number; profitCash: number; profitConsumption: number;
   ordersCount: number; voidCount: number; pendingCount: number; ticketOrders: number; ticketValue: number;
@@ -179,16 +180,17 @@ export async function profitSummary(db: Exec, from: string, to: string): Promise
   const purchases = vars.filter((v) => v.isPurchase).reduce((a, v) => a + v.amountMillimes, 0);
   const otherVariable = vars.filter((v) => !v.isPurchase).reduce((a, v) => a + v.amountMillimes, 0);
   const fixedProrated = prorateFixed(fixed, from, to);
+  const wages = await wagesInRange(db, from, to);
   const salesCash = Number(paid.salesCash);
   const creditRepayments = Number(rep.t);
   const revenueCash = salesCash + creditRepayments;
   const cogs = roundHalfUp(Number(o.cogs));
   return {
-    from, to, salesCash, creditRepayments, revenueCash, purchases, otherVariable, fixedProrated,
+    from, to, salesCash, creditRepayments, revenueCash, purchases, otherVariable, fixedProrated, wages,
     freeGiveawaysCost: roundHalfUp(Number(free?.free ?? 0)), creditChargedValue: Number(free?.credit ?? 0),
     creditOutstanding: Number(out.b), cogs,
-    profitCash: revenueCash - purchases - otherVariable - fixedProrated,
-    profitConsumption: revenueCash - cogs - otherVariable - fixedProrated,
+    profitCash: revenueCash - purchases - otherVariable - fixedProrated - wages,
+    profitConsumption: revenueCash - cogs - otherVariable - fixedProrated - wages,
     ordersCount: Number(o.n), voidCount: Number(o.voids), pendingCount: Number(o.pending), ticketOrders: Number(o.tk), ticketValue: Number(o.tkv),
     unpaidCount: Number(unp.n), unpaidValue: Number(unp.v), unpaidLossValue: Number(unp.lossV),
   };

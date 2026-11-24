@@ -17,13 +17,13 @@ function Summary({ rows }: { rows: { title: string; s: ProfitSummary }[] }) {
     <section className="mb-5">
       <div className="grid md:grid-cols-3 gap-3">
         {rows.map(({ title, s }) => {
-          const expenses = s.purchases + s.otherVariable + s.fixedProrated;
+          const expenses = s.purchases + s.otherVariable + s.fixedProrated + s.wages;
           return (
             <div key={title} className="card">
               <h2 className="h2 mb-2">{title} <span className="muted text-sm font-normal">({s.from}{s.from !== s.to ? ` → ${s.to}` : ""})</span></h2>
               <dl className="space-y-2">
                 <div className="flex justify-between items-baseline"><dt>💰 المبيعات <span className="muted text-xs">(كاش + سداد كريدي)</span></dt><dd className="text-xl font-black"><Money m={s.revenueCash} /></dd></div>
-                <div className="flex justify-between items-baseline"><dt>🧾 المصاريف <span className="muted text-xs">(مشتريات + ثابتة + أخرى)</span></dt><dd className="text-xl font-black"><Money m={expenses} /></dd></div>
+                <div className="flex justify-between items-baseline"><dt>🧾 المصاريف <span className="muted text-xs">(مشتريات + أجور + ثابتة + أخرى)</span></dt><dd className="text-xl font-black"><Money m={expenses} /></dd></div>
                 <div className={`flex justify-between items-baseline border-t pt-2 ${s.profitCash >= 0 ? "text-green-700" : "text-red-700"}`}><dt className="font-bold">📈 الربح</dt><dd className="text-2xl font-black"><Money m={s.profitCash} /></dd></div>
               </dl>
               <p className="muted text-xs mt-2">وخارج الحساب: تذاكر <Money m={s.ticketValue} /> ({s.ticketOrders} طلب) · غير مدفوع <Money m={s.unpaidValue} /> ({s.unpaidCount})</p>
@@ -43,7 +43,7 @@ function Cards({ title, s }: { title: string; s: ProfitSummary }) {
         <Stat label="كاش مقبوض (مبيعات)" value={<Money m={s.salesCash} />} hint={<>+ سداد كريدي <Money m={s.creditRepayments} /></>} />
         <Stat label="تذاكر" value={<Money m={s.ticketValue} />} hint={`${s.ticketOrders} طلب`} />
         <Stat label="المشتريات + متغيرة" value={<Money m={s.purchases + s.otherVariable} />} hint={<>مشتريات <Money m={s.purchases} /></>} />
-        <Stat label="ثابتة (موزعة)" value={<Money m={s.fixedProrated} />} />
+        <Stat label="ثابتة (موزعة)" value={<Money m={s.fixedProrated} />} hint={<>أجور العمال <Money m={s.wages} /></>} />
         <Stat label="الربح (نقدي)" value={<Money m={s.profitCash} />} tone={s.profitCash >= 0 ? "good" : "bad"} hint="الإيراد − المشتريات − المصاريف" />
         <Stat label="الربح (استهلاك)" value={<Money m={s.profitConsumption} />} tone={s.profitConsumption >= 0 ? "good" : "bad"} hint="الإيراد − تكلفة المبيع − المصاريف" />
         <Stat label="مجاني (تكلفة)" value={<Money m={s.freeGiveawaysCost} />} tone="warn" />

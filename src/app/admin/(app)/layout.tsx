@@ -17,6 +17,7 @@ const NAV: [string, string][] = [
   ["/admin/tickets", "التذاكر"],
   ["/admin/customers", "الكريدي والزبائن"],
   ["/admin/expenses", "المصاريف"],
+  ["/admin/wages", "أجور العمال"],
   ["/admin/stats", "الإحصائيات"],
   ["/admin/alerts", "التنبيهات"],
   ["/admin/audit", "سجل التدقيق"],

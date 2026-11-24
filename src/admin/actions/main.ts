@@ -488,3 +488,46 @@ export async function deleteStockItemAction(fd: FormData) {
 export async function deleteCustomerAction(fd: FormData) {
   await run(fd, async ({ db, actor, f }) => { await deleteCustomer(db, f.int("id"), actor); return "/admin/customers"; }, "تم حذف الزبون ✓");
 }
+
+// ---------------------------------------------------------------- wages
+import { addAdvance, addWorker, cancelAdvance, cancelPayment, payWage, setAttendance, updateWorker } from "@/server/wages";
+import { weekStart as weekMonday } from "@/lib/time";
+
+export async function addWorkerAction(fd: FormData) {
+  await run(fd, async ({ db, actor, f }) => {
+    await addWorker(db, f.str("nameAr", true), f.money("wage"), f.str("startDay") || shiftInfo(new Date(), 6, 15).businessDay, actor);
+  }, "تمت إضافة العامل ✓");
+}
+
+export async function updateWorkerAction(fd: FormData) {
+  await run(fd, async ({ db, actor, f }) => {
+    await updateWorker(db, f.int("id"), { nameAr: f.str("nameAr"), wage: f.money("wage"), endDay: f.opt("endDay") }, actor);
+  }, "تم تعديل العامل ✓");
+}
+
+export async function attendanceAction(fd: FormData) {
+  await run(fd, async ({ db, actor, f }) => {
+    const entries: { workerId: number; day: string; halves: number }[] = [];
+    for (const [k, v] of f.raw().entries()) {
+      const m = /^att_(\d+)_(\d{4}-\d{2}-\d{2})$/.exec(k);
+      if (m) entries.push({ workerId: Number(m[1]), day: m[2], halves: Number(v) });
+    }
+    await setAttendance(db, entries, actor);
+  }, "تم حفظ الحضور ✓");
+}
+
+export async function advanceAction(fd: FormData) {
+  await run(fd, async ({ db, actor, f }) => { await addAdvance(db, f.int("workerId"), f.money("amount"), f.time("ts"), f.opt("note"), actor); }, "تم تسجيل التسبقة ✓");
+}
+
+export async function cancelAdvanceAction(fd: FormData) {
+  await run(fd, async ({ db, actor, f }) => { await cancelAdvance(db, f.int("id"), actor); }, "تم إلغاء التسبقة ✓");
+}
+
+export async function payWageAction(fd: FormData) {
+  await run(fd, async ({ db, actor, f }) => { await payWage(db, f.int("workerId"), f.money("amount"), weekMonday(f.str("week", true)), f.time("ts"), f.opt("note"), actor); }, "تم تسجيل الدفع ✓");
+}
+
+export async function cancelPaymentAction(fd: FormData) {
+  await run(fd, async ({ db, actor, f }) => { await cancelPayment(db, f.int("id"), actor); }, "تم إلغاء الدفعة ✓");
+}

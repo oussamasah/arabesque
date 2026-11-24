@@ -345,3 +345,44 @@ export const alerts = pgTable("alerts", {
   acknowledgedAt: ts("acknowledged_at"),
   resolvedAt: ts("resolved_at"),
 }, (t) => [index("alerts_dedupe").on(t.dedupeKey), index("alerts_ts").on(t.ts)]);
+
+// ---------------------------------------------------------------- wages (weekly, paid on Monday)
+export const workers = pgTable("workers", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  nameAr: text("name_ar").notNull(),
+  dailyWageMillimes: big("daily_wage_millimes").notNull(),
+  startDay: date("start_day", { mode: "string" }).notNull(), // days from here count as worked unless marked otherwise
+  endDay: date("end_day", { mode: "string" }), // last working day (null = still working)
+  createdAt: ts("created_at").notNull().defaultNow(),
+});
+
+/** Explicit attendance / wage snapshot of one day (0, 1 or 2 halves). Unrecorded days count as a full day. */
+export const workerDays = pgTable("worker_days", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  workerId: big("worker_id").notNull().references(() => workers.id),
+  day: date("day", { mode: "string" }).notNull(),
+  halves: integer("halves").notNull(),
+  wageMillimes: big("wage_millimes").notNull(),
+}, (t) => [uniqueIndex("worker_days_uq").on(t.workerId, t.day)]);
+
+export const workerAdvances = pgTable("worker_advances", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  workerId: big("worker_id").notNull().references(() => workers.id),
+  ts: ts("ts").notNull(),
+  businessDay: date("business_day", { mode: "string" }).notNull(),
+  amountMillimes: big("amount_millimes").notNull(),
+  note: text("note"),
+  createdBy: text("created_by"),
+  cancelledAt: ts("cancelled_at"),
+});
+
+export const wagePayments = pgTable("wage_payments", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  workerId: big("worker_id").notNull().references(() => workers.id),
+  ts: ts("ts").notNull(),
+  weekStart: date("week_start", { mode: "string" }).notNull(), // the week (Monday) this payment settles
+  amountMillimes: big("amount_millimes").notNull(),
+  note: text("note"),
+  createdBy: text("created_by"),
+  cancelledAt: ts("cancelled_at"),
+});

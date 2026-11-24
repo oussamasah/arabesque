@@ -36,6 +36,13 @@
       "when": 1795430228415,
       "tag": "0004_ticket_sheet_delete",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1795600000000,
+      "tag": "0005_wages",
+      "breakpoints": true
     }
   ]
 }
